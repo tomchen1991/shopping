@@ -1,0 +1,28 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #20332d;
+  background: #f3f7f3;
+  line-height: 1.6;
+}
+
+body { margin: 0; }
+main { max-width: 40rem; margin: 0 auto; padding: 12vh 1.5rem 3rem; }
+.eyebrow { color: #386456; font-weight: 700; letter-spacing: 0.1em; }
+h1 { font-size: clamp(2.5rem, 8vw, 4rem); margin: 0; }
+.intro { color: #435b53; margin: 0.5rem 0 2rem; }
+section { padding: 1.5rem; border: 1px solid #cfdfd7; border-radius: 1rem; background: white; }
+h2 { font-size: 1.15rem; margin: 0; }
+[role='status'] { margin: 0.5rem 0 1rem; }
+[data-state='ok'] { color: #166445; }
+[data-state='error'] { color: #9c302a; }
+button {
+  border: 0;
+  border-radius: 0.5rem;
+  padding: 0.55rem 1rem;
+  background: #235944;
+  color: white;
+  font: inherit;
+  cursor: pointer;
+}
+button:disabled { cursor: wait; opacity: 0.65; }
+button:focus-visible { outline: 2px solid #235944; outline-offset: 3px; }

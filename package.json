@@ -1,0 +1,17 @@
+{
+  "name": "personal-order-room",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.23.0",
+  "engines": { "node": ">=22.12.0" },
+  "scripts": {
+    "build": "pnpm run build:web && pnpm run build:api",
+    "build:web": "pnpm --filter @order-room/web build",
+    "build:api": "pnpm --filter @order-room/api build",
+    "test": "pnpm --filter @order-room/api test",
+    "test:e2e": "playwright install --only-shell --no-remove chromium && playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.1"
+  }
+}
