@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 
-test('a failed health check can recover by retrying against the separate Worker', async ({ page }) => {
+test('HTTP 200 with unhealthy JSON is not shown as connected; retry uses the separate Worker', async ({ page }) => {
   const endpoint = '**/api/health';
-  await page.route(endpoint, route => route.abort('failed'));
+  await page.route(endpoint, route => route.fulfill({ status: 200, json: { status: 'degraded' } }));
   await page.goto('/');
   await expect(page.getByText('无法连接 API，请重试。')).toBeVisible();
 
