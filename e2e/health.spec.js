@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
-const healthStatus = page => page.getByRole('region', {name: '服务状态'}).getByRole('status');
 const healthUrl = 'http://127.0.0.1:8791/api/health';
+const healthStatus = page => page.getByRole('region', { name: '服务状态' }).getByRole('status');
 
 test('静态页面通过浏览器连接本地 Worker', async ({ page }) => {
   const healthResponse = page.waitForResponse(healthUrl);
