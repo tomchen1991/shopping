@@ -161,7 +161,7 @@ test('fixed room accepts only matching received holdings; guest projection follo
     const product = await newProduct({category, name: `示例-${category}`, interestReason: '私人笔记'});
     const order = await expect(post(`/products/${product.id}/purchases`, {kind:'regular', shop:'私人店', amountCents:314}), 201);
     const path = `/room/slots/${slot}`;
-    await expect(put(path, {holdingId:order.id}), 409);
+    await expect(put(path, {holdingId:order.id}), 400);
     await expect(post(`/purchases/${order.id}/receive`, {receivedDate:'2025-06-01'}));
     const holding = (await expect(call('/holdings'))).holdings.find(h => h.purchaseId === order.id);
     await expect(put(path, {holdingId:holding.id}));
@@ -175,7 +175,7 @@ test('fixed room accepts only matching received holdings; guest projection follo
   await expect(put(`/products/${product.id}/cover`, {coverId:id}));
   const cancelled = await expect(post(`/products/${product.id}/purchases`, {kind:'regular', shop:'隐藏店', amountCents:4}),201);
   await expect(post(`/purchases/${cancelled.id}/cancel`));
-  await expect(put('/room/slots/cabinet-2', {holdingId:cancelled.id}),409);
+  await expect(put('/room/slots/cabinet-2', {holdingId:cancelled.id}),400);
   for (const key of [id, product.id, 'cabinet-1']) assert.equal((await mf.dispatchFetch(`${publicURL}/covers/${key}`)).status,404);
   assert.ok(!JSON.stringify(await expect(guest())).includes(product.name));
   const displayed = (await expect(call('/products'))).products.find(p => p.name === '示例-figure');
@@ -187,6 +187,7 @@ test('fixed room accepts only matching received holdings; guest projection follo
   await expect(put('/room/share', {enabled:false}));
   assert.equal((await guest()).status,404);
   assert.equal((await mf.dispatchFetch(coverURL)).status,404);
+  for (const slot of ['desk-2','shelf-2','cabinet-2']) await expect(put(`/room/slots/${slot}`, {holdingId:null}));
 });
 
 test('local R2 stores raster bytes and only a verified owner can attach or read them', async () => {
