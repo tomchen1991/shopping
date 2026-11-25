@@ -36,4 +36,4 @@
 
 `src/worker.js` 的 `createWorker({ resolveIdentity })` 是唯一管理 API 身份边界。未来适配器须校验会话或凭据，返回可信且稳定的 `{ subject }`，或对无效请求返回 `null`。应用不信任自报用户 ID。未验证请求返回 `401`，其他用户的数据与不存在的数据同样返回 `404`。浏览器跨源请求仅允许 `WEB_ORIGIN`；允许的 CORS 预检不读取业务数据。
 
-`src/index.js` 是部署入口，未配置适配器。`fixtures/management-worker.js` 仅用于 `pnpm test` 的本地 Miniflare 集成测试，不参与部署构建。测试自动通过 Wrangler 把迁移应用到临时空库，再由本地 Worker 使用同一份 D1 和临时 R2。
+`src/index.js` 是部署入口，未配置适配器。`fixtures/management-worker.js` 仅供 `pnpm test` 和 `pnpm test:e2e` 的本地 Miniflare 测试使用，不参与部署构建。测试自动通过 Wrangler 把迁移应用到临时空库，再由本地 Worker 使用同一份 D1 和临时 R2。浏览器测试服务仅绑定回环地址，测试会话由 Playwright 注入，前端不包含测试凭据。

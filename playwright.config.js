@@ -8,7 +8,8 @@ export default defineConfig({
   use: { ...devices['Desktop Chrome'], baseURL: webOrigin },
   webServer: [
     {
-      command: 'pnpm --filter @order-room/api dev --ip 127.0.0.1 --port 8791 --var WEB_ORIGIN:http://127.0.0.1:4173',
+      command: 'exec node apps/api/fixtures/browser-server.js',
+      gracefulShutdown: { signal: 'SIGTERM', timeout: 5000 },
       url: `${apiOrigin}/api/health`,
       reuseExistingServer: false,
       timeout: 60_000,
