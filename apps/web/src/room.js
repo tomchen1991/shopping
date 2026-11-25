@@ -118,7 +118,8 @@ export function renderSlotEditors(root, slots, products, holdings, save) {
   }));
 }
 
-export async function startPublicRoom(apiOrigin, token) {
+export async function startPublicRoom(apiUrl, token) {
+  const resolveUrl = typeof apiUrl === 'function' ? apiUrl : path => new URL(path, apiUrl).toString();
   const panel = document.getElementById('public-room');
   panel.hidden = false;
   const status = document.getElementById('public-room-status');
@@ -127,7 +128,7 @@ export async function startPublicRoom(apiOrigin, token) {
       status.textContent = '此房间未公开或链接已失效。';
       return;
     }
-    const response = await fetch(new URL(`/api/public/rooms/${token}`, apiOrigin), {
+    const response = await fetch(resolveUrl(`/api/public/rooms/${token}`), {
       credentials: 'omit', signal: AbortSignal.timeout(10000), referrerPolicy: 'no-referrer',
     });
     if (response.status === 404) {
@@ -137,7 +138,7 @@ export async function startPublicRoom(apiOrigin, token) {
     if (!response.ok) throw new Error('Room unavailable');
     const { slots } = await response.json();
     renderRoom(document.getElementById('public-room-scene'), slots, {
-      coverUrl: exhibit => exhibit.coverPath ? new URL(exhibit.coverPath, apiOrigin) : null,
+      coverUrl: exhibit => exhibit.coverPath ? resolveUrl(exhibit.coverPath) : null,
     });
     status.textContent = slots.some(slot => slot.exhibit) ? '仅展示房间内公开摆放的收藏。' : '这间小屋还没有摆出收藏。';
   } catch {

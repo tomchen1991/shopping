@@ -8,6 +8,8 @@ const categories = {
 const amounts = { amountCents: '已付金额', depositCents: '定金', balanceCents: '尾款' };
 const purchaseStates = { pending: '待收货', received: '已收货', cancelled: '已取消' };
 const mimeTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+const activityCoalesceMs = 60_000;
+const codePattern = /^(?:\d{6}|[a-f0-9]{32})$/;
 const money = cents => `CNY ${(cents / 100).toFixed(2)}`;
 const byId = id => document.getElementById(id);
 
@@ -65,10 +67,25 @@ function checkedCover(file) {
   return file;
 }
 
+function parseRetryAfterSeconds(value) {
+  if (!value) return 60;
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) return Math.min(86400, Math.max(1, Number(trimmed)));
+  const at = Date.parse(trimmed);
+  if (Number.isFinite(at)) return Math.min(86400, Math.max(1, Math.ceil((at - Date.now()) / 1000)));
+  return 60;
+}
+
 class RequestError extends Error {
-  constructor(responseStatus, body) {
+  constructor(responseStatus, body = {}, retryAfterSeconds = null) {
     const messages = {
       unauthorized: '尚未验证身份，无法访问订购管理。',
+      session_invalid: '尚未验证身份，无法访问订购管理。',
+      invalid_code: '验证码或恢复码无效，请检查输入或等待下一枚验证码。',
+      origin_not_allowed: '当前站点无权访问管理 API。',
+      auth_rate_limited: `请求过于频繁${retryAfterSeconds ? `，请在 ${retryAfterSeconds} 秒后重试` : ''}。`,
+      auth_unavailable: '认证服务暂时不可用，请稍后重试。',
+      revocation_unconfirmed: '本地会话已清除，但远端撤销未得到确认。',
       holding_not_placeable: '无法摆放：请选择已收货、分类相符且未占用其他槽位的持有物。',
       purchase_closed: '该购买记录已收货或取消，请重新打开商品查看状态。',
       invalid_input: `提交内容无效${body.field ? `（${body.field}）` : ''}。`,
@@ -78,13 +95,19 @@ class RequestError extends Error {
     };
     super(messages[body.error] || '管理请求失败，请稍后重试。');
     this.status = responseStatus;
+    this.code = body.error;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 
-export function startManagement(apiOrigin) {
+export function startManagement(apiUrl) {
+  const resolveUrl = typeof apiUrl === 'function' ? apiUrl : path => new URL(path, apiUrl).toString();
   const root = byId('management');
   const status = byId('manage-status');
   const reload = byId('reload-management');
+  const authLogin = byId('auth-login');
+  const authLogout = byId('auth-logout');
+  const loginButton = authLogin.querySelector('button[type="submit"]');
   const create = byId('create-product');
   const detail = byId('product-detail');
   let products = [];
@@ -96,11 +119,19 @@ export function startManagement(apiOrigin) {
   const shareToggle = byId('room-share-toggle');
   let coverUrl;
   let busy = false;
+  let authMode = 'unknown';
+  let authenticated = false;
+  let lastActivityAt = 0;
+  let activityInFlight = null;
+  let loginBlockedUntil = 0;
+  let activityBlockedUntil = 0;
+  let loginCooldownTimer = null;
+  let sessionExpiredByActivity = false;
 
   async function api(path, { method = 'GET', json, file, image = false } = {}) {
     let response;
     try {
-      response = await fetch(new URL(`/api/manage${path}`, apiOrigin), {
+      response = await fetch(resolveUrl(`/api/manage${path}`), {
         method, credentials: 'include', signal: AbortSignal.timeout(15000),
         headers: file ? { 'Content-Type': file.type } : json ? { 'Content-Type': 'application/json' } : {},
         body: file ?? (json && JSON.stringify(json)),
@@ -112,6 +143,20 @@ export function startManagement(apiOrigin) {
     return image ? response.blob() : response.json();
   }
 
+  async function authFetch(action, { method = 'GET', json } = {}) {
+    try {
+      return await fetch(resolveUrl(`/api/auth/${action}`), {
+        method,
+        credentials: 'same-origin',
+        signal: AbortSignal.timeout(15000),
+        headers: json ? { 'Content-Type': 'application/json' } : {},
+        ...(json && { body: JSON.stringify(json) }),
+      });
+    } catch {
+      throw new Error('无法连接认证服务，请检查网络后重试。');
+    }
+  }
+
   function closeDetail() {
     if (coverUrl) URL.revokeObjectURL(coverUrl);
     coverUrl = undefined;
@@ -119,39 +164,120 @@ export function startManagement(apiOrigin) {
     detail.hidden = true;
   }
 
-  async function run(action) {
+  function clearPrivateState() {
+    root.hidden = true;
+    products = [];
+    holdings = [];
+    room = undefined;
+    renderPrivateRoom();
+    closeDetail();
+    renderOverview();
+    create.reset();
+    renderCategory();
+  }
+
+  function syncLoginButtonLock() {
+    const remaining = loginBlockedUntil - Date.now();
+    if (loginCooldownTimer) {
+      clearTimeout(loginCooldownTimer);
+      loginCooldownTimer = null;
+    }
+    if (remaining > 0) {
+      loginButton.disabled = true;
+      loginCooldownTimer = setTimeout(() => {
+        loginCooldownTimer = null;
+        loginButton.disabled = busy;
+      }, remaining);
+    } else {
+      loginButton.disabled = busy;
+    }
+  }
+
+  function expireSession(message) {
+    sessionExpiredByActivity = true;
+    authenticated = false;
+    lastActivityAt = 0;
+    clearPrivateState();
+    authLogin.hidden = authMode !== 'enabled';
+    authLogout.hidden = true;
+    reload.hidden = false;
+    status.textContent = message;
+    status.dataset.state = 'error';
+  }
+
+  function recordUserActivity() {
+    if (authMode !== 'enabled' || !authenticated || activityInFlight) return;
+    const now = Date.now();
+    if (now < activityBlockedUntil || now - lastActivityAt < activityCoalesceMs) return;
+    activityInFlight = (async () => {
+      let response;
+      try {
+        response = await fetch(resolveUrl('/api/auth/activity'), {
+          method: 'POST',
+          credentials: 'same-origin',
+          signal: AbortSignal.timeout(15000),
+        });
+      } catch {
+        return;
+      }
+      if (response.status === 401) {
+        expireSession('会话已失效，请重新登录。');
+        return;
+      }
+      if (response.status === 429) {
+        const seconds = parseRetryAfterSeconds(response.headers.get('Retry-After'));
+        activityBlockedUntil = Date.now() + seconds * 1000;
+        loginBlockedUntil = Math.max(loginBlockedUntil, activityBlockedUntil);
+        syncLoginButtonLock();
+        expireSession(`会话刷新过于频繁，请在 ${seconds} 秒后重新登录。`);
+        return;
+      }
+      if (response.ok) {
+        const body = await response.json().catch(() => null);
+        if (body?.authenticated === true) lastActivityAt = Date.now();
+      }
+    })().finally(() => {
+      activityInFlight = null;
+    });
+  }
+
+  async function run(action, { trackActivity = true } = {}) {
     if (busy) return;
-    busy = root.disabled = reload.disabled = true;
+    sessionExpiredByActivity = false;
+    if (trackActivity && authMode === 'enabled' && authenticated) recordUserActivity();
+    busy = root.disabled = reload.disabled = authLogout.disabled = true;
+    loginButton.disabled = true;
     status.textContent = '处理中…';
     status.dataset.state = 'checking';
     try {
-      status.textContent = (await action()) || '管理数据已加载。';
+      const message = await action();
+      if (sessionExpiredByActivity) return;
+      status.textContent = message || '管理数据已加载。';
       status.dataset.state = 'ok';
     } catch (error) {
+      if (sessionExpiredByActivity) return;
       if (error.status === 401 || error.status === 403) {
-        root.hidden = true;
+        authenticated = false;
+        lastActivityAt = 0;
+        clearPrivateState();
         reload.hidden = false;
-        products = holdings = [];
-        room = undefined;
-        renderPrivateRoom();
-        closeDetail();
-        renderOverview();
-        create.reset();
-        renderCategory();
+        authLogout.hidden = true;
+        if (authMode === 'enabled') authLogin.hidden = error.status !== 401;
       }
       status.textContent = error.status === 403 ? '当前站点无权访问管理 API。' : error.message;
       status.dataset.state = 'error';
     } finally {
-      busy = root.disabled = reload.disabled = false;
+      busy = root.disabled = reload.disabled = authLogout.disabled = false;
+      syncLoginButtonLock();
     }
   }
 
-  function bind(form, handler) {
+  function bind(form, handler, options) {
     form.addEventListener('submit', event => {
       event.preventDefault();
       if (busy) return;
       const data = Object.fromEntries(new FormData(form));
-      void run(() => handler(data));
+      void run(() => handler(data), options);
     });
   }
 
@@ -198,7 +324,7 @@ export function startManagement(apiOrigin) {
       return;
     }
     renderRoom(scene, room.slots, {
-      coverUrl: exhibit => exhibit.hasCover ? new URL(`/api/manage/products/${exhibit.productId}/cover`, apiOrigin) : null,
+      coverUrl: exhibit => exhibit.hasCover ? resolveUrl(`/api/manage/products/${exhibit.productId}/cover`) : null,
       openProduct: id => void run(() => openProduct(id)),
     });
     renderSlotEditors(editors, room.slots, products, holdings, (slot, holdingId) => void run(async () => {
@@ -229,6 +355,103 @@ export function startManagement(apiOrigin) {
     root.hidden = false;
   }
 
+  async function initSession() {
+    reload.hidden = false;
+    const response = await authFetch('status');
+    if (response.status === 404) {
+      authMode = 'disabled';
+      authLogin.hidden = true;
+      authLogout.hidden = true;
+      await loadManagement();
+      return;
+    }
+    authMode = 'enabled';
+    if (response.status === 401) {
+      authenticated = false;
+      clearPrivateState();
+      authLogin.hidden = false;
+      authLogout.hidden = true;
+      throw new RequestError(401, { error: 'unauthorized' });
+    }
+    if (response.status === 403) {
+      authenticated = false;
+      clearPrivateState();
+      authLogin.hidden = true;
+      authLogout.hidden = true;
+      throw new RequestError(403, { error: 'origin_not_allowed' });
+    }
+    if (!response.ok) {
+      authenticated = false;
+      clearPrivateState();
+      authLogin.hidden = true;
+      authLogout.hidden = true;
+      throw new Error('暂时无法验证身份，请稍后重试。');
+    }
+    const body = await response.json().catch(() => null);
+    if (body?.authenticated !== true) {
+      authenticated = false;
+      clearPrivateState();
+      authLogin.hidden = true;
+      authLogout.hidden = true;
+      throw new Error('暂时无法验证身份，请稍后重试。');
+    }
+    authenticated = true;
+    lastActivityAt = 0;
+    authLogin.hidden = true;
+    authLogout.hidden = false;
+    await loadManagement();
+  }
+
+  bind(authLogin, async data => {
+    const remaining = loginBlockedUntil - Date.now();
+    if (remaining > 0) {
+      throw new Error(`请求过于频繁，请在 ${Math.ceil(remaining / 1000)} 秒后重试。`);
+    }
+    const code = (data.code ?? '').trim();
+    if (!codePattern.test(code)) {
+      throw new Error('请输入 6 位数字验证码或 32 位小写十六进制恢复码。');
+    }
+    const response = await authFetch('login', { method: 'POST', json: { code } });
+    const body = await response.json().catch(() => ({}));
+    if (response.status === 429) {
+      const seconds = parseRetryAfterSeconds(response.headers.get('Retry-After'));
+      loginBlockedUntil = Date.now() + seconds * 1000;
+      syncLoginButtonLock();
+      throw new RequestError(429, { error: 'auth_rate_limited', ...body }, seconds);
+    }
+    if (!response.ok) {
+      throw new RequestError(response.status, body);
+    }
+    if (body?.authenticated !== true) {
+      throw new RequestError(503, { error: 'auth_unavailable' });
+    }
+    authMode = 'enabled';
+    authenticated = true;
+    lastActivityAt = Date.now();
+    loginBlockedUntil = 0;
+    activityBlockedUntil = 0;
+    authLogin.reset();
+    authLogin.hidden = true;
+    authLogout.hidden = false;
+    await loadManagement();
+    return '已登录，管理数据已加载。';
+  }, { trackActivity: false });
+
+  authLogout.addEventListener('click', () => void run(async () => {
+    const response = await authFetch('logout', { method: 'POST' });
+    const body = await response.json().catch(() => ({}));
+    authenticated = false;
+    lastActivityAt = 0;
+    clearPrivateState();
+    authLogin.hidden = authMode !== 'enabled';
+    authLogout.hidden = true;
+    reload.hidden = false;
+    if (!response.ok) {
+      throw new RequestError(response.status, body);
+    }
+    return body.remoteRevoked === null ? '本地会话已清除。' : '已退出登录。';
+  }, { trackActivity: false }));
+
   async function attachCover(id, file) {
     const { id: coverId } = await api('/covers', { method: 'POST', file });
     return api(`/products/${id}/cover`, { method: 'PUT', json: { coverId } });
@@ -253,6 +476,8 @@ export function startManagement(apiOrigin) {
       el('button', product.coverId ? '更换封面' : '上传封面', { class: 'secondary' }));
     bind(upload, async data => {
       const updated = await attachCover(product.id, checkedCover(data.cover));
+      const idx = products.findIndex(item => item.id === updated.id);
+      if (idx !== -1) products[idx] = updated;
       await renderCover(area, updated);
       if (room.slots.some(slot => slot.exhibit?.productId === product.id)) {
         room = await api('/room');
@@ -379,8 +604,19 @@ export function startManagement(apiOrigin) {
     }
     return '商品已添加。';
   });
+
+  for (const eventName of ['click', 'change', 'keydown']) {
+    root.addEventListener(eventName, event => {
+      if (event.isTrusted === false) return;
+      recordUserActivity();
+    });
+  }
+
   create.elements.category.addEventListener('change', renderCategory);
-  reload.addEventListener('click', () => void run(loadManagement));
+  reload.addEventListener('click', () => {
+    if (authMode === 'enabled' && !authenticated) void run(initSession, { trackActivity: false });
+    else void run(loadManagement, { trackActivity: authMode === 'enabled' });
+  });
   renderCategory();
-  void run(loadManagement);
+  void run(initSession, { trackActivity: false });
 }

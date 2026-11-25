@@ -22,7 +22,16 @@
       <section id="management-panel" aria-labelledby="manage-title">
         <h2 id="manage-title">订购管理</h2>
         <p id="manage-status" role="status" aria-atomic="true">正在检查管理会话…</p>
-        <button type="button" id="reload-management" hidden>重新加载管理数据</button>
+        <form id="auth-login" class="inline-form auth-login" hidden>
+          <label>验证码或恢复码
+            <input name="code" type="text" autocomplete="one-time-code" autocapitalize="off" spellcheck="false" maxlength="64" placeholder="6 位数字验证码或 32 位恢复码" required>
+          </label>
+          <button type="submit">登录</button>
+        </form>
+        <div class="session-actions">
+          <button type="button" id="reload-management" hidden>重新加载管理数据</button>
+          <button type="button" id="auth-logout" class="secondary" hidden>退出登录</button>
+        </div>
         <fieldset id="management" hidden>
           <legend class="sr-only">私有管理</legend>
           <section id="room-management" aria-labelledby="room-title">

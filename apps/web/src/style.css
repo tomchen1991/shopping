@@ -52,6 +52,9 @@ input, select, textarea {
 }
 .inline-form { display: flex; align-items: end; flex-wrap: wrap; gap: 0.6rem; margin: 0.7rem 0; }
 .inline-form label { max-width: 100%; }
+.auth-login { margin: 0.75rem 0; }
+.auth-login input { min-width: 16rem; }
+.session-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 0.5rem 0; }
 .secondary { background: #e5efe9; color: #20332d; }
 .danger { background: #f7e9e6; color: #802d29; }
 .product-list { list-style: none; padding: 0; margin: 0; }

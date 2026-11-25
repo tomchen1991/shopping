@@ -2,8 +2,8 @@ import './style.css';
 import { startManagement } from './management.js';
 import { startPublicRoom } from './room.js';
 
-const apiOrigin = import.meta.env.VITE_API_BASE_URL
-  || (import.meta.env.DEV ? 'http://127.0.0.1:8787' : window.location.origin);
+const apiOrigin = import.meta.env.VITE_API_BASE_URL || '';
+const apiUrl = path => (apiOrigin ? new URL(path, apiOrigin).toString() : path);
 const status = document.querySelector('#health-status');
 const checkButton = document.querySelector('#check-health');
 
@@ -13,7 +13,7 @@ async function checkHealth() {
   status.dataset.state = 'checking';
 
   try {
-    const response = await fetch(new URL('/api/health', apiOrigin), {
+    const response = await fetch(apiUrl('/api/health'), {
       signal: AbortSignal.timeout(5000),
     });
     if (!response.ok || (await response.json()).status !== 'ok') {
@@ -33,9 +33,9 @@ const roomPath = /^\/room(?:\/(.*))?$/.exec(window.location.pathname);
 if (roomPath) {
   document.getElementById('management-panel').hidden = true;
   document.querySelector('.health').hidden = true;
-  void startPublicRoom(apiOrigin, roomPath[1] ?? '');
+  void startPublicRoom(apiUrl, roomPath[1] ?? '');
 } else {
   checkButton.addEventListener('click', checkHealth);
   void checkHealth();
-  startManagement(apiOrigin);
+  startManagement(apiUrl);
 }
