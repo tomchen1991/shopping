@@ -1,0 +1,31 @@
+import './style.css';
+
+const apiOrigin = import.meta.env.VITE_API_BASE_URL
+  || (import.meta.env.DEV ? 'http://127.0.0.1:8787' : window.location.origin);
+const status = document.querySelector('#health-status');
+const checkButton = document.querySelector('#check-health');
+
+async function checkHealth() {
+  checkButton.disabled = true;
+  status.textContent = '正在检查 API…';
+  status.dataset.state = 'checking';
+
+  try {
+    const response = await fetch(new URL('/api/health', apiOrigin), {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok || (await response.json()).status !== 'ok') {
+      throw new Error('Unexpected health response');
+    }
+    status.textContent = 'API 连接正常';
+    status.dataset.state = 'ok';
+  } catch {
+    status.textContent = '无法连接 API，请重试。';
+    status.dataset.state = 'error';
+  } finally {
+    checkButton.disabled = false;
+  }
+}
+
+checkButton.addEventListener('click', checkHealth);
+void checkHealth();

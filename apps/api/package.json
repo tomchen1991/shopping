@@ -1,0 +1,11 @@
+{
+  "name": "@order-room/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "test": "node --test"
+  },
+  "devDependencies": { "wrangler": "4.168.0" }
+}
