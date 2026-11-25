@@ -6,7 +6,7 @@
 }
 
 body { margin: 0; }
-main { max-width: 40rem; margin: 0 auto; padding: 12vh 1.5rem 3rem; }
+main { max-width: 56rem; margin: 0 auto; padding: 5vh 1.25rem 3rem; }
 .eyebrow { color: #386456; font-weight: 700; letter-spacing: 0.1em; }
 h1 { font-size: clamp(2.5rem, 8vw, 4rem); margin: 0; }
 .intro { color: #435b53; margin: 0.5rem 0 2rem; }
@@ -26,3 +26,40 @@ button {
 }
 button:disabled { cursor: wait; opacity: 0.65; }
 button:focus-visible { outline: 2px solid #235944; outline-offset: 3px; }
+
+[hidden] { display: none !important; }
+#management { border: 0; padding: 0; margin: 0; min-inline-size: 0; }
+#management section { margin-top: 1rem; background: #f9fcfa; }
+.health { margin-top: 1rem; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+h3, h4, h5 { margin: 0 0 0.55rem; }
+h4 { margin-top: 1rem; }
+h5 { font-size: 1rem; }
+.fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: 0.75rem 1rem; }
+.wide { grid-column: 1 / -1; }
+label { display: flex; flex-direction: column; font-weight: 600; min-width: 0; }
+input, select, textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #8aa89a;
+  border-radius: 0.4rem;
+  background: white;
+  color: inherit;
+  padding: 0.35rem 0.55rem;
+  font: inherit;
+  font-weight: 400;
+}
+.inline-form { display: flex; align-items: end; flex-wrap: wrap; gap: 0.6rem; margin: 0.7rem 0; }
+.inline-form label { max-width: 100%; }
+.secondary { background: #e5efe9; color: #20332d; }
+.danger { background: #f7e9e6; color: #802d29; }
+.product-list { list-style: none; padding: 0; margin: 0; }
+.product-list li { display: flex; align-items: center; flex-wrap: wrap; gap: 0.75rem; margin: 0.4rem 0; }
+.product-list button { text-align: start; overflow-wrap: anywhere; max-width: 100%; }
+dl { display: grid; grid-template-columns: minmax(5rem, max-content) minmax(0, 1fr); gap: 0.25rem 0.9rem; }
+dt { font-weight: 600; }
+dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+h3, h5, #holdings-list { overflow-wrap: anywhere; }
+.cover { display: block; max-width: 100%; max-height: 14rem; border-radius: 0.5rem; object-fit: contain; }
+.purchase { padding: 1rem; margin-top: 0.65rem; border: 1px solid #cfdfd7; border-radius: 0.75rem; background: white; }

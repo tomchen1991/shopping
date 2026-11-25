@@ -1,4 +1,5 @@
 import './style.css';
+import { startManagement } from './management.js';
 
 const apiOrigin = import.meta.env.VITE_API_BASE_URL
   || (import.meta.env.DEV ? 'http://127.0.0.1:8787' : window.location.origin);
@@ -29,3 +30,4 @@ async function checkHealth() {
 
 checkButton.addEventListener('click', checkHealth);
 void checkHealth();
+startManagement(apiOrigin);
