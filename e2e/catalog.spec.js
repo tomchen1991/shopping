@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 
 // The credential is accepted only by the fixture Worker, not the deployment entrypoint.
 async function openPrivatePage(page) {
-  await page.context().addCookies([{name:'order_room_test', value:'test-alice', url:'http://127.0.0.1:8791', httpOnly:true, sameSite:'Strict'}]);
+  await page.context().addCookies([{name:'order_room_test', value:'test-bob', domain:'127.0.0.1', path:'/api/manage', httpOnly:true, sameSite:'Strict'}]);
   await page.goto('/');
 }
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64');
