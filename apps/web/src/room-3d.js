@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { buildActiveGadgets } from './gadgets-3d.js';
 
 const PRESETS = {
   overview: { position: [5.9, 4.8, 6.7], target: [0.15, 1.3, -0.6] },
   electronics: { position: [1.55, 2.35, 3.35], target: [-1.85, 1.18, 1.08] },
-  game: { position: [-0.65, 2.25, 1.35], target: [-0.65, 1.68, -2.5] },
+  game: { position: [-0.65, 2.05, 2.45], target: [-0.65, 1.48, -2.55] },
   figure: { position: [0.72, 2.1, 1.9], target: [2.25, 1.62, -1.65] },
 };
 
@@ -199,7 +200,7 @@ function box(w, h, d, material, pos = [0, 0, 0], { cast = true, receive = true }
   return mesh;
 }
 
-export function createRoomStage(container, { onSelectSlot, onHoverSlot, onProject } = {}) {
+export function createRoomStage(container, { onSelectSlot, onHoverSlot, onHoverGadget, onProject } = {}) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
   renderer.shadowMap.enabled = true;
@@ -248,8 +249,8 @@ export function createRoomStage(container, { onSelectSlot, onHoverSlot, onProjec
 
   const cabinetSpotA = new THREE.PointLight(0xfff3d6, 3.8, 4.5, 1.5);
   const cabinetSpotB = new THREE.PointLight(0xfff3d6, 2.4, 3.8, 1.6);
-  const shelfLight = new THREE.PointLight(0xf59e0b, 1.5, 4.6, 1.7);
-  shelfLight.position.set(-0.65, 2.35, -2.15);
+  const shelfLight = new THREE.PointLight(0xf59e0b, 1.8, 6.2, 1.4);
+  shelfLight.position.set(-0.65, 1.95, -1.75);
 
   scene.add(ambientLight, hemiLight, keyLight, deskLampLight, shelfLight);
 
@@ -325,33 +326,33 @@ export function createRoomStage(container, { onSelectSlot, onHoverSlot, onProjec
   // ZONE 1: STUDIO ELECTRONICS DESK (desk-1, desk-2)
   // =========================================================
   const deskGroup = new THREE.Group();
-  deskGroup.position.set(-2.05, 0, 1.08);
+  deskGroup.position.set(-2.05, 0, 1.05);
   // Tabletop & steel legs
-  deskGroup.add(box(1.32, 0.08, 3.05, walnutMat, [0, 0.86, 0]));
-  for (const [lx, lz] of [[-0.54, -1.35], [0.54, -1.35], [-0.54, 1.35], [0.54, 1.35]]) {
+  deskGroup.add(box(1.36, 0.08, 3.45, walnutMat, [0, 0.86, 0]));
+  for (const [lx, lz] of [[-0.56, -1.55], [0.56, -1.55], [-0.56, 1.55], [0.56, 1.55]]) {
     deskGroup.add(box(0.07, 0.84, 0.07, matteMetalMat, [lx, 0.42, lz]));
   }
-  deskGroup.add(box(0.04, 0.03, 2.8, accentLedMat, [-0.62, 0.81, 0], { cast: false }));
+  deskGroup.add(box(0.04, 0.03, 3.2, accentLedMat, [-0.64, 0.81, 0], { cast: false }));
   // Desk mat & mechanical keyboard + mouse
-  deskGroup.add(box(0.56, 0.015, 1.15, matteMetalMat, [0.16, 0.905, 0]));
+  deskGroup.add(box(0.56, 0.015, 1.25, matteMetalMat, [0.16, 0.905, 0]));
   deskGroup.add(box(0.18, 0.025, 0.46, new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.4 }), [0.18, 0.925, 0.05]));
   deskGroup.add(box(0.11, 0.022, 0.07, new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.35 }), [0.18, 0.922, -0.3]));
   // Studio Monitor on stand
-  deskGroup.add(box(0.14, 0.03, 0.26, matteMetalMat, [-0.42, 0.915, 0]));
-  deskGroup.add(box(0.06, 0.45, 0.08, matteMetalMat, [-0.46, 1.12, 0]));
-  deskGroup.add(box(0.06, 0.56, 1.12, matteMetalMat, [-0.36, 1.42, 0]));
+  deskGroup.add(box(0.14, 0.03, 0.26, matteMetalMat, [-0.45, 0.915, 0.22]));
+  deskGroup.add(box(0.06, 0.48, 0.08, matteMetalMat, [-0.49, 1.14, 0.22]));
+  deskGroup.add(box(0.06, 0.56, 1.12, matteMetalMat, [-0.39, 1.46, 0.22]));
   const screenMesh = new THREE.Mesh(
     new THREE.PlaneGeometry(1.04, 0.48),
     new THREE.MeshBasicMaterial({ map: monitorTex }),
   );
   screenMesh.rotation.y = Math.PI / 2;
-  screenMesh.position.set(-0.328, 1.42, 0);
+  screenMesh.position.set(-0.358, 1.46, 0.22);
   deskGroup.add(screenMesh);
   // Architect Desk Lamp
-  deskGroup.add(box(0.18, 0.03, 0.18, matteMetalMat, [-0.35, 0.915, -1.16]));
-  deskGroup.add(box(0.03, 0.55, 0.03, brassMat, [-0.35, 1.18, -1.16]));
-  deskGroup.add(box(0.24, 0.06, 0.12, matteMetalMat, [-0.22, 1.48, -1.14]));
-  deskGroup.add(box(0.18, 0.02, 0.08, ledStripMat, [-0.22, 1.445, -1.14], { cast: false }));
+  deskGroup.add(box(0.18, 0.03, 0.18, matteMetalMat, [-0.35, 0.915, -1.45]));
+  deskGroup.add(box(0.03, 0.55, 0.03, brassMat, [-0.35, 1.18, -1.45]));
+  deskGroup.add(box(0.24, 0.06, 0.12, matteMetalMat, [-0.22, 1.48, -1.43]));
+  deskGroup.add(box(0.18, 0.02, 0.08, ledStripMat, [-0.22, 1.445, -1.43], { cast: false }));
   roomGroup.add(deskGroup);
 
   // =========================================================
@@ -366,17 +367,12 @@ export function createRoomStage(container, { onSelectSlot, onHoverSlot, onProjec
   for (const sy of [0.08, 0.88, 1.72, 2.58, 3.06]) {
     shelfGroup.add(box(2.95, 0.06, 0.64, darkOakMat, [0, sy, 0]));
   }
-  // Under-shelf glowing LED strips
-  for (const ly of [1.68, 2.54]) {
+  // Under-shelf glowing LED strips (all illuminated tiers)
+  for (const ly of [0.84, 1.68, 2.54, 3.02]) {
     shelfGroup.add(box(1.32, 0.02, 0.04, ledStripMat, [-0.72, ly, 0.18], { cast: false }));
     shelfGroup.add(box(1.32, 0.02, 0.04, ledStripMat, [0.72, ly, 0.18], { cast: false }));
   }
-  // Decorative game spines on bottom shelf
-  const spineColors = [0x38bdf8, 0xf43f5e, 0xf59e0b, 0x34d399, 0xa78bfa];
-  for (let i = 0; i < 9; i++) {
-    const mat = new THREE.MeshStandardMaterial({ color: spineColors[i % spineColors.length], roughness: 0.45 });
-    shelfGroup.add(box(0.06, 0.42 + (i % 3) * 0.04, 0.34, mat, [-1.25 + i * 0.08, 0.32, 0.04]));
-  }
+  const activeGadgets = buildActiveGadgets(deskGroup, shelfGroup);
   roomGroup.add(shelfGroup);
 
   // =========================================================
@@ -423,8 +419,8 @@ export function createRoomStage(container, { onSelectSlot, onHoverSlot, onProjec
   // SLOT ANCHORS & DYNAMIC 3D EXHIBITS
   // =========================================================
   const slotSpecs = {
-    'desk-1': { parent: deskGroup, pos: [0.16, 0.9, -0.78], rotY: Math.PI / 2, kind: 'electronics' },
-    'desk-2': { parent: deskGroup, pos: [0.16, 0.9, 0.85], rotY: Math.PI / 2 - 0.18, kind: 'electronics' },
+    'desk-1': { parent: deskGroup, pos: [0.16, 0.9, -1.16], rotY: Math.PI / 2, kind: 'electronics' },
+    'desk-2': { parent: deskGroup, pos: [0.16, 0.9, 1.18], rotY: Math.PI / 2 - 0.18, kind: 'electronics' },
     'shelf-1': { parent: shelfGroup, pos: [-0.72, 1.75, 0.04], rotY: 0.1, kind: 'game' },
     'shelf-2': { parent: shelfGroup, pos: [0.72, 0.91, 0.04], rotY: -0.1, kind: 'game' },
     'cabinet-1': { parent: cabinetGroup, pos: [0, 2.08, 0], rotY: 0, kind: 'figure' },
@@ -739,10 +735,15 @@ export function createRoomStage(container, { onSelectSlot, onHoverSlot, onProjec
     markActive();
   }
 
-  // Raycasting for 3D exhibit click/hover
+  // Raycasting for 3D exhibit click/hover and active gadgets tooltip
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
+  const gadgetMeshes = [];
+  roomGroup.traverse(node => {
+    if (node.isMesh && node.userData.gadget) gadgetMeshes.push(node);
+  });
   let pointerDown = null;
+  let hoveredGadget = null;
 
   function hitSlot(clientX, clientY) {
     const rect = renderer.domElement.getBoundingClientRect();
@@ -754,16 +755,31 @@ export function createRoomStage(container, { onSelectSlot, onHoverSlot, onProjec
     return hits[0]?.object?.userData?.slotId ?? null;
   }
 
+  function hitGadget(clientX, clientY) {
+    const rect = renderer.domElement.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(pointer, camera);
+    const hits = raycaster.intersectObjects(gadgetMeshes, false);
+    return hits[0]?.object?.userData?.gadget ?? null;
+  }
+
   renderer.domElement.addEventListener('pointerdown', event => {
     pointerDown = [event.clientX, event.clientY];
     camAnim = null;
   });
   renderer.domElement.addEventListener('pointermove', event => {
     const slotId = hitSlot(event.clientX, event.clientY);
-    renderer.domElement.style.cursor = slotId ? 'pointer' : 'grab';
+    const gadget = slotId ? null : hitGadget(event.clientX, event.clientY);
+    renderer.domElement.style.cursor = slotId ? 'pointer' : gadget ? 'help' : 'grab';
     if (slotId !== hoveredSlot) {
       hoveredSlot = slotId;
       onHoverSlot?.(slotId);
+    }
+    if (gadget !== hoveredGadget) {
+      hoveredGadget = gadget;
+      onHoverGadget?.(gadget);
     }
   });
   renderer.domElement.addEventListener('pointerup', event => {
@@ -869,6 +885,7 @@ export function createRoomStage(container, { onSelectSlot, onHoverSlot, onProjec
       controls.dispose();
       for (const tex of textures) tex.dispose();
       for (const tex of exhibitTextures.values()) tex.dispose();
+      activeGadgets.dispose();
       skyMat.map?.dispose();
       renderer.dispose();
       renderer.domElement.remove();

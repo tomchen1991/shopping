@@ -42,8 +42,9 @@ export function renderRoom(sceneEl, slots, { coverUrl, modelUrl, openProduct } =
   if (!record) {
     sceneEl.replaceChildren();
     const overlay = el('div', null, { class: 'room-overlay' });
-    const hint = el('div', '拖拽旋转 3D 视角 · 滚轮缩放 · 点击展品检视详情', { class: 'room-hud-hint' });
-    sceneEl.append(overlay, hint);
+    const gadgetChip = el('div', null, { class: 'room-gadget-chip', hidden: '' });
+    const hint = el('div', '拖拽旋转 3D 视角 · 滚轮缩放 · 悬停现役设备看详情', { class: 'room-hud-hint' });
+    sceneEl.append(overlay, gadgetChip, hint);
     record = { overlay, markers: new Map(), openProduct, stage: null };
     try {
       record.stage = createRoomStage(sceneEl, {
@@ -55,6 +56,18 @@ export function renderRoom(sceneEl, slots, { coverUrl, modelUrl, openProduct } =
           for (const [id, marker] of record.markers.entries()) {
             marker.classList.toggle('is-hovered', id === slotId);
           }
+        },
+        onHoverGadget(gadget) {
+          if (!gadget) {
+            gadgetChip.hidden = true;
+            gadgetChip.replaceChildren();
+            return;
+          }
+          gadgetChip.replaceChildren(
+            el('strong', `现役 · ${gadget.name}`),
+            el('span', `${gadget.category} · ${gadget.period} — ${gadget.note}`),
+          );
+          gadgetChip.hidden = false;
         },
         onProject(projected) {
           for (const [id, marker] of record.markers.entries()) {

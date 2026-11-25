@@ -55,6 +55,34 @@
   backdrop-filter: blur(8px);
 }
 
+.room-gadget-chip {
+  position: absolute;
+  left: 0.9rem;
+  top: 0.85rem;
+  z-index: 5;
+  pointer-events: none;
+  display: grid;
+  gap: 0.15rem;
+  max-width: min(26rem, calc(100% - 1.8rem));
+  padding: 0.45rem 0.75rem;
+  border-radius: 0.7rem;
+  background: rgba(11, 17, 27, 0.88);
+  border: 1px solid rgba(56, 189, 248, 0.42);
+  color: #f8fafc;
+  font-size: 0.78rem;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.42);
+}
+
+.room-gadget-chip strong {
+  color: #7dd3fc;
+}
+
+.room-gadget-chip span {
+  color: #cbd5e1;
+  font-size: 0.74rem;
+}
+
 .room-marker {
   position: absolute;
   transform: translate(-50%, -100%);
