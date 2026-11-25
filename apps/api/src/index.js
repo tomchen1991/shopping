@@ -1,4 +1,6 @@
 import { createWorker } from './worker.js';
 
-// No production identity adapter has been agreed. Management remains closed.
-export default createWorker();
+import { handleAuth, resolveSession } from './auth.js';
+export { AuthSession } from './auth-session.js';
+
+export default createWorker({ resolveIdentity: resolveSession, handleAuth });

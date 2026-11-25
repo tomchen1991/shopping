@@ -7,7 +7,7 @@ const publicPrefix = '/api/public/rooms';
 
 // resolveIdentity(request, env) must return a verified, stable { subject } or null.
 // Only the composition entry point can supply an adapter, never a request or binding.
-export function createWorker({ resolveIdentity } = {}) {
+export function createWorker({ resolveIdentity, handleAuth } = {}) {
   return {
     async fetch(request, env) {
       const { pathname } = new URL(request.url);
@@ -15,6 +15,9 @@ export function createWorker({ resolveIdentity } = {}) {
       const origin = request.headers.get('Origin');
       const allowedOrigin = origin && origin === env.WEB_ORIGIN;
       const json = (body, status = 200) => Response.json(body, { status, headers });
+      if (handleAuth && pathname.startsWith('/api/auth/')) {
+        return handleAuth(request, env, pathname, headers);
+      }
       if (allowedOrigin) headers.set('Access-Control-Allow-Origin', origin);
 
       if (pathname === '/api/health') {

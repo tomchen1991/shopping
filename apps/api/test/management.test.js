@@ -8,6 +8,7 @@ import { after, before, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { convertV4MiniflareOptions, Miniflare } from 'miniflare';
 import deployed from '../src/index.js';
+import fixture from '../fixtures/management-worker.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const databaseId = '00000000-0000-0000-0000-000000000000'; // Local ID in wrangler.jsonc
@@ -200,7 +201,12 @@ test('local R2 stores raster bytes and only a verified owner can attach or read 
   await expect(call(path, { method: 'PUT', json: { coverId: 'https://other.example/cover.png' } }), 400);
   await expect(call('/covers', { method: 'POST', body: '<svg/>', headers: { 'Content-Type': 'image/svg+xml' } }), 415);
   await expect(call('/covers', { method: 'POST', body: 'not a png', headers: { 'Content-Type': 'image/png' } }), 400);
-  await expect(call('/covers', { method: 'POST', body: new Uint8Array(5 * 1024 * 1024 + 1), headers: { 'Content-Type': 'image/png' } }), 413);
+  // Test the streaming cap without a socket: an early 413 can close the
+  // Miniflare connection while the HTTP client is still uploading 5 MiB.
+  await expect(fixture.fetch(new Request('https://api.example/api/manage/covers', {
+    method: 'POST', headers: { Authorization: alice, 'Content-Type': 'image/png' },
+    body: new Uint8Array(5 * 1024 * 1024 + 1),
+  }), { WEB_ORIGIN: webOrigin }), 413);
   const { id } = await expect(call('/covers', { method: 'POST', body: png, headers: { 'Content-Type': 'image/png' } }), 201);
   const bucket = await mf.getR2Bucket('COVERS');
   assert.deepEqual(Buffer.from(await (await bucket.get(`covers/${id}`)).arrayBuffer()), png);

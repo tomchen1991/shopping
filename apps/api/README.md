@@ -43,8 +43,29 @@
 - `GET /api/public/rooms/:token/covers/:slot` 仅用于读取该房间对应槽位的当前封面，不接受商品或 R2 对象 ID。房间未分享、链接已失效、槽位无展品或封面不存在均返回 `404`（空的已分享房间仍可访问）。房间和封面均使用 `Cache-Control: no-store`。
 - 分享令牌默认不存在。在已经分享时重复开启会保留当前链接；关闭会撤销令牌，重新开启生成新链接。关闭不删除房间布置，也不能收回已保存的副本。
 
+## 生产域名与前端对接
+
+生产配置位于 `wrangler.jsonc` 的 `env.production`。首次 Worker 发布和两条 D1 迁移已完成；正式域名的 Pages/DNS 接入和真实验证码登录仍待验收。
+
+- 前端：`https://shopping.falsita.cn`
+- Worker Route：`shopping.falsita.cn/api/*`；其他路径继续由 Pages 服务。前端使用相对路径 `/api/*`，不设置 `VITE_API_BASE_URL`，不访问 Auth 的 token endpoint。
+- 接入正式域名时确认 `shopping.falsita.cn` 已绑定到 Pages 且 DNS 已代理。需要更新数据库时运行 `pnpm --filter @order-room/api exec wrangler d1 migrations apply DB --remote --env production`。发布须显式指定 `--env production`；先加 `--dry-run` 检查，发布后验收根页面与 `/api/health` 的路由。
+
+## Falsita Auth：站内验证码 + 24 小时滑动会话
+
+Auth 管理页为本应用配置独立 client：允许站内输入验证码，选择「24 小时活动滑动」，不需要回调、跳转登录或 Passkey。`OIDC_ISSUER` 已设为 `https://auth.falsita.cn`。生产环境需注入 `OIDC_CLIENT_ID`、`OIDC_CLIENT_SECRET` 和 `AUTH_SESSION_KEY`（32 随机字节的十六进制编码，64 字符）。可分别运行 `pnpm --filter @order-room/api exec wrangler secret put <NAME> --env production`，不要把值放进前端、Git 或日志。变更加密密钥会使已有本地会话不可读。
+
+| 接口 | 前端约定 |
+| --- | --- |
+| `POST /api/auth/login` | JSON `{ "code": "012345" }`，也支持 32 位小写十六进制恢复码。成功 `200 { authenticated: true }` 并设置 HttpOnly 会话 Cookie。`401 invalid_code` 提示检查验证码或等待下一枚；`429` 遵守 `Retry-After`；`503` 提示稍后重试。不要自动重交验证码。 |
+| `GET /api/auth/status` | 初始化页面或被动检查使用。`200 { authenticated: true }`，`401` 显示登录，`503` 表示暂时无法验证。不会续期。 |
+| `POST /api/auth/activity` | 无请求体。仅由真实用户操作触发；合并短时间内的操作，不用于页面加载、心跳、后台轮询或自动重连。成功更新 Cookie 和 24 小时空闲期限。`401` 要求重新登录；`429` 遵守 `Retry-After`，不自动重试刷新。 |
+| `POST /api/auth/logout` | 无请求体。`200 { remoteRevoked: true }` 表示已撤销，`null` 表示没有可撤销的本地会话；`503 revocation_unconfirmed` 表示浏览器 Cookie 已清除，但远端撤销未得到确认。 |
+
+用浏览器默认同源凭据即可，不传 Bearer，不读取或保存 Cookie 值。所有 Auth POST 和管理写请求校验精确同源 `Origin`。管理读写请求在线核验授权但不会自动续期；前端应对真实交互调用 `activity`。上游单用户身份为 `owner`，不是多账号系统。Token 仅在后端处理，由 Durable Object 按会话加密持久化并串行轮换；若刷新结果不确定，不重试旧 Token，要求重新登录。
+
 ## 身份与本地测试
 
-`src/worker.js` 的 `createWorker({ resolveIdentity })` 是唯一管理 API 身份边界。未来适配器须校验会话或凭据，返回可信且稳定的 `{ subject }`，或对无效请求返回 `null`。应用不信任自报用户 ID。未验证请求返回 `401`，其他用户的数据通常与不存在的数据同样返回 `404`；摆放时非本人的持有物与不存在的持有物同样返回 `409 holding_not_placeable`。浏览器跨源请求仅允许 `WEB_ORIGIN`；允许的 CORS 预检不读取业务数据。
+`src/worker.js` 的 `createWorker({ resolveIdentity })` 是管理 API 的身份边界。应用不信任自报用户 ID。未验证请求返回 `401`，其他用户的数据通常与不存在的数据同样返回 `404`；摆放时非本人的持有物与不存在的持有物同样返回 `409 holding_not_placeable`。
 
-`src/index.js` 是部署入口，未配置适配器。`fixtures/management-worker.js` 仅供 `pnpm test` 和 `pnpm test:e2e` 的本地 Miniflare 测试使用，不参与部署构建。测试自动通过 Wrangler 把迁移应用到临时空库，再由本地 Worker 使用同一份 D1 和临时 R2。浏览器测试服务仅绑定回环地址，测试会话由 Playwright 注入，前端不包含测试凭据。
+`src/index.js` 是部署入口，使用 Falsita Auth 会话适配器；`pnpm test` 额外使用临时模拟 issuer 和真实的本地 Durable Object 检查登录、并发刷新和撤销。`fixtures/management-worker.js` 仅供 `pnpm test` 和 `pnpm test:e2e` 的本地 Miniflare 测试使用，不参与部署构建。测试自动通过 Wrangler 把迁移应用到临时空库，再由本地 Worker 使用同一份 D1 和临时 R2。浏览器测试服务仅绑定回环地址，测试会话由 Playwright 注入，前端不包含测试凭据。

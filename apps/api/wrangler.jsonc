@@ -4,6 +4,8 @@
   "main": "src/index.js",
   "compatibility_date": "2026-04-01",
   "send_metrics": false,
+  "migrations": [{ "tag": "auth-v1", "new_sqlite_classes": ["AuthSession"] }],
+  "durable_objects": { "bindings": [{ "name": "AUTH_SESSIONS", "class_name": "AuthSession" }] },
   "vars": {
     "WEB_ORIGIN": "http://127.0.0.1:5173"
   },
@@ -20,5 +22,31 @@
       "binding": "COVERS",
       "bucket_name": "order-room-covers"
     }
-  ]
+  ],
+  "env": {
+    "production": {
+      "name": "order-room-api",
+      "workers_dev": false,
+      "preview_urls": false,
+      "routes": [
+        { "pattern": "shopping.falsita.cn/api/*", "zone_name": "falsita.cn" }
+      ],
+      "vars": {
+        "WEB_ORIGIN": "https://shopping.falsita.cn",
+        "OIDC_ISSUER": "https://auth.falsita.cn"
+      },
+      "durable_objects": { "bindings": [{ "name": "AUTH_SESSIONS", "class_name": "AuthSession" }] },
+      "ratelimits": [{ "name": "AUTH_LOGIN_LIMIT", "namespace_id": "31001", "simple": { "limit": 5, "period": 60 } }],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "order-room",
+          "database_id": "ce0a4f7f-7f1a-41a6-9556-086f61d1247b"
+        }
+      ],
+      "r2_buckets": [
+        { "binding": "COVERS", "bucket_name": "order-room-covers" }
+      ]
+    }
+  }
 }

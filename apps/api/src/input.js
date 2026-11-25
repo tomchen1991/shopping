@@ -35,11 +35,11 @@ export async function readBytes(request, limit) {
   return buffer.subarray(0, length);
 }
 
-export async function jsonInput(request, allowed) {
+export async function jsonInput(request, allowed, limit = 32 * 1024) {
   if (request.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase() !== 'application/json') {
     throw new ApiError(415, 'unsupported_media_type');
   }
-  const bytes = await readBytes(request, 32 * 1024);
+  const bytes = await readBytes(request, limit);
   let body;
   try {
     body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));

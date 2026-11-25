@@ -32,6 +32,6 @@ pnpm --filter @order-room/web dev --host 127.0.0.1 --port 5173 --strictPort
 
 ## 部署边界
 
-- Pages 构建命令为 `pnpm build:web`，输出目录为 `apps/web/dist/`。前后端不同源时，构建前设置 `VITE_API_BASE_URL` 为 Worker 的公开源（如 `https://api.example.com`），并将 Worker 的 `WEB_ORIGIN` 设置为对应 Pages 源（不含路径或末尾斜杠）。未设置 `VITE_API_BASE_URL` 时，生产前端请求同源 API。分享页面 `/room/:token` 使用 Pages 的默认 SPA 回退；若另配路由规则，确保此路径仍返回前端入口。
-- `wrangler.jsonc` 的 D1 ID 是本地占位值，部署前需替换并配置真实桶；不要公开 R2 桶。本项目基线不创建资源或发布服务。
-- 健康检查始终公开；房间与展品封面仅可凭房主主动开启的分享链接读取。关闭会使原链接失效，但无法撤回访客已经查看或保存的内容。前端管理请求携带浏览器会话凭据，不设登录或测试身份入口；部署入口不装载测试适配器。管理 API 须在 Worker 侧接入真实中台身份适配器，并确认会话 Cookie 的域、跨站策略与浏览器兼容性后方可启用。CORS 不替代鉴权，本阶段不接入真实身份中台。
+- Pages 构建命令为 `pnpm build:web`，输出目录为 `apps/web/dist/`。生产浏览器从 `https://shopping.falsita.cn` 同源调用 `/api/*`，由 Worker Route 转发；不要为生产前端设置 `VITE_API_BASE_URL`。分享页面 `/room/:token` 使用 Pages 默认 SPA 回退。
+- 生产 Worker 使用独立 D1 和私有 R2；本地 D1 仍使用占位 ID。站内登录与 24 小时活动续期的配置步骤和前端调用约定见 [API 文档](apps/api/README.md)。
+- 健康检查始终公开；房间与展品封面仅可凭房主主动开启的分享链接读取。关闭会使原链接失效，但无法撤回访客已经查看或保存的内容。
