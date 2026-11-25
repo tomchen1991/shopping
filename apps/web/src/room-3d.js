@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 const PRESETS = {
   overview: { position: [5.9, 4.8, 6.7], target: [0.15, 1.3, -0.6] },
@@ -434,6 +435,8 @@ export function createRoomStage(container, { onSelectSlot, onHoverSlot, onProjec
   const slotGroups = new Map();
   const interactiveMeshes = [];
   const exhibitTextures = new Map();
+  const gltfLoader = new GLTFLoader();
+  const modelVersions = new Map();
   let currentExhibits = new Map();
   let hoveredSlot = null;
   let activeZone = 'all';
@@ -486,22 +489,109 @@ export function createRoomStage(container, { onSelectSlot, onHoverSlot, onProjec
     mesh.material = mat;
   }
 
-  function buildSlotContent(id, exhibit) {
-    const anchor = slotAnchors.get(id);
-    const prev = slotGroups.get(id);
-    if (prev) {
-      anchor.remove(prev);
-      prev.traverse(node => {
-        if (node.isMesh) {
-          node.geometry?.dispose();
-          if (Array.isArray(node.material)) node.material.forEach(m => m.dispose());
-          else node.material?.dispose();
+  function disposeObject(root) {
+    root.traverse(node => {
+      if (node.isMesh) {
+        node.geometry?.dispose();
+        const mats = Array.isArray(node.material) ? node.material : [node.material];
+        for (const mat of mats) {
+          if (!mat) continue;
+          for (const key of ['map', 'emissiveMap', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap']) {
+            mat[key]?.dispose?.();
+          }
+          mat.dispose();
         }
-      });
-    }
+      }
+    });
+  }
+
+  function removeInteractiveSlot(id) {
     for (let i = interactiveMeshes.length - 1; i >= 0; i--) {
       if (interactiveMeshes[i].userData.slotId === id) interactiveMeshes.splice(i, 1);
     }
+  }
+
+  function normalizeModelToSlot(modelRoot, kind) {
+    const limits = {
+      electronics: { maxW: 0.5, maxH: 0.48, maxD: 0.44, baseY: 0.04 },
+      game: { maxW: 0.46, maxH: 0.54, maxD: 0.36, baseY: 0.04 },
+      figure: { maxW: 0.58, maxH: 0.68, maxD: 0.52, baseY: 0.1 },
+    }[kind];
+    modelRoot.updateMatrixWorld(true);
+    const box3 = new THREE.Box3().setFromObject(modelRoot);
+    const wrapper = new THREE.Group();
+    if (box3.isEmpty()) {
+      wrapper.add(modelRoot);
+      return wrapper;
+    }
+    const size = box3.getSize(new THREE.Vector3());
+    const center = box3.getCenter(new THREE.Vector3());
+    const maxAxis = Math.max(size.x || 1, size.y || 1, size.z || 1);
+    const scale = Math.min(
+      limits.maxW / Math.max(size.x, 0.001),
+      limits.maxH / Math.max(size.y, 0.001),
+      limits.maxD / Math.max(size.z, 0.001),
+      1 / Math.max(maxAxis * 0.01, 0.001),
+    );
+    modelRoot.scale.setScalar(scale);
+    modelRoot.position.set(-center.x * scale, limits.baseY - box3.min.y * scale, -center.z * scale);
+    wrapper.add(modelRoot);
+    return wrapper;
+  }
+
+  async function loadGlbIntoSlot(id, group, exhibit, fallbackDisplay, version) {
+    try {
+      const response = await fetch(exhibit.modelUrl, {
+        credentials: exhibit.modelCredentials ?? 'omit',
+        referrerPolicy: 'no-referrer',
+        signal: AbortSignal.timeout(20000),
+      });
+      if (!response.ok) throw new Error('Model fetch failed');
+      const buffer = await response.arrayBuffer();
+      if (modelVersions.get(id) !== version) return;
+      const gltf = await new Promise((resolve, reject) => gltfLoader.parse(buffer, '', resolve, reject));
+      if (modelVersions.get(id) !== version) {
+        disposeObject(gltf.scene);
+        return;
+      }
+      const spec = slotSpecs[id];
+      const wrapped = normalizeModelToSlot(gltf.scene, spec.kind);
+      let hasMesh = false;
+      wrapped.traverse(node => {
+        if (node.isMesh) {
+          hasMesh = true;
+          node.castShadow = true;
+          node.receiveShadow = true;
+          node.userData.slotId = id;
+        }
+      });
+      if (hasMesh) {
+        if (fallbackDisplay) {
+          for (const node of fallbackDisplay) node.visible = false;
+        }
+        removeInteractiveSlot(id);
+        wrapped.traverse(node => {
+          if (node.isMesh) interactiveMeshes.push(node);
+        });
+      }
+      group.add(wrapped);
+      renderer.shadowMap.needsUpdate = true;
+      markActive();
+    } catch {
+      // Keep the 2D cover standee fallback visible if model fails to load.
+    }
+  }
+
+  function buildSlotContent(id, exhibit) {
+    const anchor = slotAnchors.get(id);
+    const version = (modelVersions.get(id) ?? 0) + 1;
+    modelVersions.set(id, version);
+    const prev = slotGroups.get(id);
+    if (prev) {
+      anchor.remove(prev);
+      disposeObject(prev);
+    }
+    removeInteractiveSlot(id);
 
     const group = new THREE.Group();
     const spec = slotSpecs[id];
@@ -521,6 +611,7 @@ export function createRoomStage(container, { onSelectSlot, onHoverSlot, onProjec
 
     if (exhibit) {
       let displayMesh;
+      const fallbackNodes = [];
       if (spec.kind === 'electronics') {
         const stand = box(0.46, 0.05, 0.26, matteMetalMat, [0, 0.05, 0]);
         const bezel = box(0.5, 0.38, 0.04, matteMetalMat, [0, 0.28, -0.02]);
@@ -529,6 +620,7 @@ export function createRoomStage(container, { onSelectSlot, onHoverSlot, onProjec
         displayMesh.position.set(0, 0.28, 0.004);
         displayMesh.rotation.x = -0.14;
         group.add(stand, bezel, displayMesh);
+        fallbackNodes.push(stand, bezel, displayMesh);
       } else if (spec.kind === 'game') {
         const easel = box(0.36, 0.04, 0.22, brassMat, [0, 0.04, 0]);
         const caseBox = box(0.38, 0.5, 0.05, new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.3, metalness: 0.4 }), [0, 0.29, -0.01]);
@@ -537,6 +629,7 @@ export function createRoomStage(container, { onSelectSlot, onHoverSlot, onProjec
         displayMesh.position.set(0, 0.29, 0.02);
         displayMesh.rotation.x = -0.12;
         group.add(easel, caseBox, displayMesh);
+        fallbackNodes.push(easel, caseBox, displayMesh);
       } else {
         // Figure inside illuminated glass cabinet on tiered museum riser
         const riser = new THREE.Mesh(
@@ -548,11 +641,15 @@ export function createRoomStage(container, { onSelectSlot, onHoverSlot, onProjec
         displayMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.44, 0.54), new THREE.MeshStandardMaterial({ color: 0xfbbf24, side: THREE.DoubleSide }));
         displayMesh.position.set(0, 0.41, 0.006);
         group.add(riser, frame, displayMesh);
+        fallbackNodes.push(frame, displayMesh);
         group.userData.turntable = true;
       }
       displayMesh.userData.slotId = id;
       applyCoverMaterial(displayMesh, exhibit, spec.kind === 'electronics' ? 0x38bdf8 : spec.kind === 'game' ? 0xa78bfa : 0xfbbf24);
       interactiveMeshes.push(displayMesh);
+      if (exhibit.modelUrl) {
+        void loadGlbIntoSlot(id, group, exhibit, fallbackNodes, version);
+      }
     }
 
     anchor.add(group);

@@ -37,7 +37,7 @@ export function destroyRoom(sceneEl) {
   sceneEl.replaceChildren();
 }
 
-export function renderRoom(sceneEl, slots, { coverUrl, openProduct } = {}) {
+export function renderRoom(sceneEl, slots, { coverUrl, modelUrl, openProduct } = {}) {
   let record = stages.get(sceneEl);
   if (!record) {
     sceneEl.replaceChildren();
@@ -123,11 +123,17 @@ export function renderRoom(sceneEl, slots, { coverUrl, openProduct } = {}) {
       marker.addEventListener('mouseenter', () => record.stage?.setHoveredSlot(id));
       marker.addEventListener('mouseleave', () => record.stage?.setHoveredSlot(null));
 
+      const modelSrc = exhibit && modelUrl?.(exhibit);
       record.overlay.append(marker);
       record.markers.set(id, marker);
       stageExhibits.push({
         slot: id,
-        exhibit: exhibit ? { ...exhibit, imageEl } : null,
+        exhibit: exhibit ? {
+          ...exhibit,
+          imageEl,
+          modelUrl: modelSrc ? String(modelSrc) : null,
+          modelCredentials: openProduct ? 'include' : 'omit',
+        } : null,
       });
     }
   }
@@ -215,6 +221,7 @@ export async function startPublicRoom(apiUrl, token) {
     const { slots } = await response.json();
     renderRoom(sceneEl, slots, {
       coverUrl: exhibit => exhibit.coverPath ? resolveUrl(exhibit.coverPath) : null,
+      modelUrl: exhibit => exhibit.modelPath ? resolveUrl(exhibit.modelPath) : null,
     });
     status.textContent = slots.some(slot => slot.exhibit) ? '仅展示房间内公开摆放的收藏。' : '这间小屋还没有摆出收藏。';
   } catch {

@@ -1,5 +1,5 @@
 import { ApiError, date, invalid, jsonInput, paymentInput, productInput, purchaseInput, readBytes } from './input.js';
-import { coverKey, coverResponse } from './cover.js';
+import { coverKey, coverResponse, modelKey, modelResponse } from './cover.js';
 
 const notFound = () => { throw new ApiError(404, 'not_found'); };
 const conflict = () => { throw new ApiError(409, 'purchase_closed'); };
@@ -7,7 +7,7 @@ const viewProduct = row => ({
   id: row.id, name: row.name, category: row.category, link: row.link,
   targetPriceCents: row.target_price_cents, tags: JSON.parse(row.tags_json),
   interestReason: row.interest_reason, details: JSON.parse(row.details_json),
-  coverId: row.cover_id, createdAt: row.created_at,
+  coverId: row.cover_id, modelId: row.model_id ?? null, createdAt: row.created_at,
 });
 const viewPurchase = row => ({
   id: row.id, productId: row.product_id, kind: row.kind, shop: row.shop,
@@ -23,6 +23,18 @@ const imageTypes = {
   'image/gif': bytes => ['GIF87a', 'GIF89a'].includes(ascii(bytes, 0, 6)),
 };
 const ascii = (bytes, start, end) => String.fromCharCode(...bytes.subarray(start, end));
+
+function validGlb(bytes) {
+  if (bytes.byteLength < 20) return false;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const magic = view.getUint32(0, true);
+  const version = view.getUint32(4, true);
+  const totalLength = view.getUint32(8, true);
+  const chunkLength = view.getUint32(12, true);
+  const chunkType = view.getUint32(16, true);
+  return magic === 0x46546C67 && version === 2 && totalLength === bytes.byteLength
+    && chunkLength >= 2 && chunkLength <= totalLength - 20 && chunkType === 0x4E4F534A;
+}
 
 export async function manage(request, env, ownerId, path, headers) {
   const { DB, COVERS } = env;
@@ -57,13 +69,23 @@ export async function manage(request, env, ownerId, path, headers) {
     await sql('INSERT INTO covers (id, owner_id, content_type) VALUES (?, ?, ?)', id, ownerId, mime).run();
     return json({ id }, 201);
   }
+  if (path === '/models' && method === 'POST') {
+    const mime = request.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase();
+    if (mime !== 'model/gltf-binary') throw new ApiError(415, 'unsupported_media_type');
+    const bytes = await readBytes(request, 20 * 1024 * 1024);
+    if (!validGlb(bytes)) invalid('body');
+    const id = crypto.randomUUID();
+    await COVERS.put(modelKey(id), bytes, { httpMetadata: { contentType: mime } });
+    await sql('INSERT INTO models (id, owner_id, content_type) VALUES (?, ?, ?)', id, ownerId, mime).run();
+    return json({ id }, 201);
+  }
   if (path === '/holdings' && method === 'GET') {
     const { results } = await sql(`SELECT id, product_id AS productId, purchase_id AS purchaseId,
       received_date AS receivedDate FROM holdings WHERE owner_id = ? ORDER BY received_date DESC, id`, ownerId).all();
     return json({ holdings: results });
   }
 
-  const productRoute = /^\/products\/([a-f0-9-]{36})(?:\/(cover|purchases))?$/.exec(path);
+  const productRoute = /^\/products\/([a-f0-9-]{36})(?:\/(cover|model|purchases))?$/.exec(path);
   if (productRoute) {
     const [, id, sub] = productRoute;
     if (!sub && method === 'GET') {
@@ -82,6 +104,23 @@ export async function manage(request, env, ownerId, path, headers) {
       const row = await sql(`SELECT c.id, c.content_type FROM products p JOIN covers c
         ON c.id = p.cover_id AND c.owner_id = p.owner_id WHERE p.owner_id = ? AND p.id = ?`, ownerId, id).first();
       return (await coverResponse(COVERS, row, headers)) ?? notFound();
+    }
+    if (sub === 'model' && method === 'PUT') {
+      const { modelId } = await jsonInput(request, ['modelId']);
+      if (modelId === null) {
+        const row = await sql('UPDATE products SET model_id = NULL WHERE owner_id = ? AND id = ? RETURNING *', ownerId, id).first();
+        return row ? json(viewProduct(row)) : notFound();
+      }
+      if (typeof modelId !== 'string' || !/^[a-f0-9-]{36}$/.test(modelId)) invalid('modelId');
+      const row = await sql(`UPDATE products SET model_id = ? WHERE owner_id = ? AND id = ?
+        AND EXISTS (SELECT 1 FROM models WHERE owner_id = ? AND id = ?) RETURNING *`,
+      modelId, ownerId, id, ownerId, modelId).first();
+      return row ? json(viewProduct(row)) : notFound();
+    }
+    if (sub === 'model' && method === 'GET') {
+      const row = await sql(`SELECT m.id, m.content_type FROM products p JOIN models m
+        ON m.id = p.model_id AND m.owner_id = p.owner_id WHERE p.owner_id = ? AND p.id = ?`, ownerId, id).first();
+      return (await modelResponse(COVERS, row, headers)) ?? notFound();
     }
     if (sub === 'purchases' && ['GET', 'POST'].includes(method)) {
       if (!(await product(id))) return notFound();

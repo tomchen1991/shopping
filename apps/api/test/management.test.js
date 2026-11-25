@@ -92,6 +92,7 @@ test('minimum product fields and all category details round trip through D1', as
   assert.deepEqual(minimum.details, {});
   assert.deepEqual(minimum.tags, []);
   assert.deepEqual(await expect(call(`/products/${minimum.id}`)), minimum);
+  assert.equal(minimum.modelId, null);
   for (const [category, details] of Object.entries({
     electronics: { brand: '品牌', model: 'V1', configuration: '16GB / 512GB', specifications: '144 Hz' },
     game: { platform: 'Switch', medium: '卡带', edition: '限定版', developer: '工作室', releaseDate: '2024-02-29' },
@@ -321,4 +322,65 @@ test('public share only exposes current slot metadata and covers; revocation and
   assert.notEqual(reopened.shareToken, shareToken);
   await expect(visitor(`/api/public/rooms/${reopened.shareToken}`));
   for (const path of [publicPath, coverPath]) await expect(visitor(path), 404);
+});
+
+function buildMinimalGlb() {
+  const json = Buffer.from(JSON.stringify({ asset: { version: '2.0' }, scenes: [{ nodes: [] }], scene: 0 }));
+  const pad = (4 - (json.length % 4)) % 4;
+  const chunkLen = json.length + pad;
+  const totalLen = 12 + 8 + chunkLen;
+  const out = Buffer.alloc(totalLen, 0x20);
+  out.writeUInt32LE(0x46546C67, 0);
+  out.writeUInt32LE(2, 4);
+  out.writeUInt32LE(totalLen, 8);
+  out.writeUInt32LE(chunkLen, 12);
+  out.writeUInt32LE(0x4E4F534A, 16);
+  json.copy(out, 20);
+  return out;
+}
+
+test('local R2 stores glb 3D models, enforces ownership, and exposes via active share only', async () => {
+  const figure = await newProduct({ name: '带3D模型手办', category: 'figure' });
+  const bobsProduct = await newProduct({ name: 'Bob手办', category: 'figure' }, bob);
+  const modelPath = `/products/${figure.id}/model`;
+  const glb = buildMinimalGlb();
+  await expect(call(modelPath), 404);
+  await expect(call('/models', { method: 'POST', body: glb, headers: { 'Content-Type': 'application/octet-stream' } }), 415);
+  await expect(call('/models', { method: 'POST', body: 'not a glb', headers: { 'Content-Type': 'model/gltf-binary' } }), 400);
+  const { id } = await expect(call('/models', { method: 'POST', body: glb, headers: { 'Content-Type': 'model/gltf-binary' } }), 201);
+  const bucket = await mf.getR2Bucket('COVERS');
+  assert.deepEqual(Buffer.from(await (await bucket.get(`models/${id}`)).arrayBuffer()), glb);
+  await expect(call(`/products/${bobsProduct.id}/model`, { auth: bob, method: 'PUT', json: { modelId: id } }), 404);
+  assert.equal((await expect(call(modelPath, { method: 'PUT', json: { modelId: id } }))).modelId, id);
+  const fetched = await call(modelPath);
+  assert.equal(fetched.status, 200);
+  assert.equal(fetched.headers.get('Content-Type'), 'model/gltf-binary');
+  assert.deepEqual(Buffer.from(await fetched.arrayBuffer()), glb);
+  await expect(call(modelPath, { auth: bob }), 404);
+  await expect(call(modelPath, { auth: null }), 401);
+
+  const holding = await receiveHolding(await order(figure));
+  await expect(place('cabinet-1', holding.id));
+  const privateRoom = await expect(call('/room'));
+  assert.equal(privateRoom.slots.find(s => s.slot === 'cabinet-1').exhibit.hasModel, true);
+
+  const { shareToken } = await expect(put('/room/share', { enabled: true }));
+  const publicPath = `/api/public/rooms/${shareToken}`;
+  const publicModelPath = `${publicPath}/models/cabinet-1`;
+  const publicRoom = await expect(visitor(publicPath));
+  assert.deepEqual(publicRoom.slots.find(s => s.slot === 'cabinet-1'), {
+    slot: 'cabinet-1', category: 'figure',
+    exhibit: { name: figure.name, coverPath: null, modelPath: publicModelPath },
+  });
+  const guestModel = await visitor(publicModelPath);
+  assert.equal(guestModel.status, 200);
+  assert.equal(guestModel.headers.get('Content-Type'), 'model/gltf-binary');
+  assert.deepEqual(Buffer.from(await guestModel.arrayBuffer()), glb);
+
+  await expect(put('/room/share', { enabled: false }));
+  assert.equal((await visitor(publicModelPath)).status, 404);
+
+  assert.equal((await expect(call(modelPath, { method: 'PUT', json: { modelId: null } }))).modelId, null);
+  await expect(call(modelPath), 404);
+  await expect(place('cabinet-1', null));
 });

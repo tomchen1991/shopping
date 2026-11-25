@@ -10,6 +10,9 @@
 | `POST /covers` | 上传原始图片字节（非 multipart），返回 `{ id }`（201）。 |
 | `PUT /products/:productId/cover` | `{ coverId }`，关联本人已上传的封面，返回更新后的商品。 |
 | `GET /products/:productId/cover` | 按商品读取关联封面的图片字节。 |
+| `POST /models` | 上传 `.glb` 3D 模型原始字节（`Content-Type: model/gltf-binary`，最大 20 MiB），返回 `{ id }`（201）。 |
+| `PUT /products/:productId/model` | `{ modelId }`（传 `null` 可解绑），关联本人已上传的 3D 模型，返回更新后的商品。 |
+| `GET /products/:productId/model` | 按商品读取关联 3D 模型的 `.glb` 字节。 |
 | `POST /products/:productId/purchases` | 为该商品创建一条待收货购买记录，返回记录（201）。 |
 | `GET /products/:productId/purchases` | 返回 `{ purchases }`。 |
 | `GET /purchases/:purchaseId` | 返回购买记录。 |
@@ -29,7 +32,7 @@
 - `game`：`platform`、`medium`、`edition`、`developer`、`releaseDate`（`YYYY-MM-DD`）。
 - `figure`：`work`、`character`、`manufacturer`、`series`、`scale`、`height`、`expectedRelease`（可为季度等文本）。
 
-详情字段均为字符串。商品响应返回 `id`、输入字段、`coverId` 和 `createdAt`。上传使用 `image/png`、`image/jpeg`、`image/webp` 或 `image/gif`，最大 5 MiB，并校验文件签名。外链与 SVG 不被接受。R2 桶应保持私有；管理 API 仅允许本人读取已关联的图片，公开房间 API 仅允许通过有效分享链接读取当前展品的封面。不自动回收未关联的上传文件。
+详情字段均为字符串。商品响应返回 `id`、输入字段、`coverId`、`modelId` 和 `createdAt`。封面上传使用 `image/png`、`image/jpeg`、`image/webp` 或 `image/gif`，最大 5 MiB，并校验文件签名；3D 模型上传使用 `model/gltf-binary`（`.glb`），最大 20 MiB，并校验 glTF 2.0 二进制头部签名。外链与 SVG 不被接受。R2 桶应保持私有；管理 API 仅允许本人读取已关联的封面和模型，公开房间 API 仅允许通过有效分享链接读取当前展品的封面与模型。不自动回收未关联的上传文件。
 
 ## 购买与收货
 
@@ -39,8 +42,8 @@
 
 固定槽位为桌面 `desk-1`、`desk-2`（电子产品），媒体架 `shelf-1`、`shelf-2`（游戏），展示柜 `cabinet-1`、`cabinet-2`（手办）。只有本人已收货且分类匹配的持有物可以摆放；单件持有物只能占一个槽位。不满足这些条件时返回 `409 holding_not_placeable`。每个私有槽位返回 `{ slot, category, exhibit }`，其中空位的 `exhibit` 为 `null`，其他为 `{ holdingId, productId, name, hasCover }`。
 
-- `GET /api/public/rooms/:token` 无需登录，返回 `{ slots }`。槽位同样包含 `slot`、`category` 和 `exhibit`；公开展品仅含 `{ name, coverPath }`，没有封面时 `coverPath` 为 `null`。
-- `GET /api/public/rooms/:token/covers/:slot` 仅用于读取该房间对应槽位的当前封面，不接受商品或 R2 对象 ID。房间未分享、链接已失效、槽位无展品或封面不存在均返回 `404`（空的已分享房间仍可访问）。房间和封面均使用 `Cache-Control: no-store`。
+- `GET /api/public/rooms/:token` 无需登录，返回 `{ slots }`。槽位同样包含 `slot`、`category` 和 `exhibit`；公开展品仅含 `{ name, coverPath }`（当展品绑定了 3D 模型时额外包含 `modelPath`），没有封面时 `coverPath` 为 `null`。
+- `GET /api/public/rooms/:token/covers/:slot` 与 `GET /api/public/rooms/:token/models/:slot` 仅用于读取该房间对应槽位的当前封面或 3D 模型，不接受商品或 R2 对象 ID。房间未分享、链接已失效、槽位无展品或资源不存在均返回 `404`（空的已分享房间仍可访问）。房间、封面和模型均使用 `Cache-Control: no-store`。
 - 分享令牌默认不存在。在已经分享时重复开启会保留当前链接；关闭会撤销令牌，重新开启生成新链接。关闭不删除房间布置，也不能收回已保存的副本。
 
 ## 生产域名与前端对接

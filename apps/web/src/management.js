@@ -67,6 +67,18 @@ function checkedCover(file) {
   return file;
 }
 
+async function checkedModel(file) {
+  if (!file || !file.name) return null;
+  if (!file.name.toLowerCase().endsWith('.glb') || !file.size || file.size > 20 * 1024 * 1024) {
+    throw new Error('请选择不超过 20 MiB 的 .glb 3D 模型文件。');
+  }
+  const head = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+  if (head[0] !== 0x67 || head[1] !== 0x6C || head[2] !== 0x54 || head[3] !== 0x46) {
+    throw new Error('所选文件不是有效的 glTF 2.0 二进制 (.glb) 模型。');
+  }
+  return file;
+}
+
 function parseRetryAfterSeconds(value) {
   if (!value) return 60;
   const trimmed = value.trim();
@@ -133,12 +145,12 @@ export function startManagement(apiUrl) {
 
   bindRoomToolbar(byId('room-management'), scene);
 
-  async function api(path, { method = 'GET', json, file, image = false } = {}) {
+  async function api(path, { method = 'GET', json, file, contentType, image = false } = {}) {
     let response;
     try {
       response = await fetch(resolveUrl(`/api/manage${path}`), {
         method, credentials: 'include', signal: AbortSignal.timeout(15000),
-        headers: file ? { 'Content-Type': file.type } : json ? { 'Content-Type': 'application/json' } : {},
+        headers: file ? { 'Content-Type': contentType || file.type } : json ? { 'Content-Type': 'application/json' } : {},
         body: file ?? (json && JSON.stringify(json)),
       });
     } catch {
@@ -351,6 +363,7 @@ export function startManagement(apiUrl) {
     }
     renderRoom(scene, room.slots, {
       coverUrl: exhibit => exhibit.hasCover ? resolveUrl(`/api/manage/products/${exhibit.productId}/cover`) : null,
+      modelUrl: exhibit => exhibit.hasModel ? resolveUrl(`/api/manage/products/${exhibit.productId}/model`) : null,
       openProduct: id => void run(() => openProduct(id)),
     });
     renderSlotEditors(editors, room.slots, products, holdings, (slot, holdingId) => void run(async () => {
@@ -538,11 +551,54 @@ export function startManagement(apiUrl) {
     area.append(upload);
   }
 
+  async function attachModel(id, file) {
+    const { id: modelId } = await api('/models', { method: 'POST', file, contentType: 'model/gltf-binary' });
+    return api(`/products/${id}/model`, { method: 'PUT', json: { modelId } });
+  }
+
+  function renderModel(area, product) {
+    area.replaceChildren();
+    area.append(el('p', product.modelId ? '已绑定 3D 模型（.glb），摆入 3D 房间后将直接渲染立体模型。' : '尚未上传 3D 模型（房间内使用封面展示）。', { class: 'status-line' }));
+    const upload = el('form', null, { class: 'inline-form' });
+    upload.append(
+      field('选择 3D 模型（.glb，最大 20 MiB）', { type: 'file', name: 'model', accept: '.glb,model/gltf-binary', required: '' }),
+      el('button', product.modelId ? '更换 3D 模型' : '上传 3D 模型', { class: 'secondary' }),
+    );
+    if (product.modelId) {
+      const remove = el('button', '移除 3D 模型', { type: 'button', class: 'danger' });
+      remove.addEventListener('click', () => void run(async () => {
+        const updated = await api(`/products/${product.id}/model`, { method: 'PUT', json: { modelId: null } });
+        const idx = products.findIndex(item => item.id === updated.id);
+        if (idx !== -1) products[idx] = updated;
+        renderModel(area, updated);
+        if (room.slots.some(slot => slot.exhibit?.productId === product.id)) {
+          room = await api('/room');
+          renderPrivateRoom();
+        }
+        return '3D 模型已移除。';
+      }));
+      upload.append(remove);
+    }
+    bind(upload, async data => {
+      const updated = await attachModel(product.id, await checkedModel(data.model));
+      const idx = products.findIndex(item => item.id === updated.id);
+      if (idx !== -1) products[idx] = updated;
+      renderModel(area, updated);
+      if (room.slots.some(slot => slot.exhibit?.productId === product.id)) {
+        room = await api('/room');
+        renderPrivateRoom();
+      }
+      return '3D 模型已保存。';
+    });
+    area.append(upload);
+  }
+
   async function openProduct(id) {
     const [product, { purchases }] = await Promise.all([api(`/products/${id}`), api(`/products/${id}/purchases`)]);
     closeDetail();
     const category = categories[product.category];
     const cover = el('div');
+    const model = el('div');
     const purchaseList = el('div');
     const title = el('h3', product.name, { tabindex: '-1' });
     detail.append(title, description([
@@ -550,8 +606,9 @@ export function startManagement(apiUrl) {
       ['目标价', product.targetPriceCents == null ? null : money(product.targetPriceCents)],
       ['感兴趣的原因', product.interestReason],
       ...Object.entries(category.fields).map(([key, label]) => [label, product.details[key]]),
-    ]), cover, el('h4', '登记购买'), purchaseForm(product, purchases, purchaseList), el('h4', '购买记录'), purchaseList);
+    ]), cover, el('h4', '3D 模型（.glb）'), model, el('h4', '登记购买'), purchaseForm(product, purchases, purchaseList), el('h4', '购买记录'), purchaseList);
     renderPurchases(purchases, purchaseList);
+    renderModel(model, product);
     detail.hidden = false;
     await renderCover(cover, product);
     // The enclosing fieldset is busy until run() returns; the heading is not a control.
