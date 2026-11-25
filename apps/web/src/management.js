@@ -1,3 +1,5 @@
+import { renderRoom, renderSlotEditors } from './room.js';
+
 const categories = {
   electronics: { label: '电子产品', fields: { brand: '品牌', model: '型号', configuration: '配置', specifications: '规格' } },
   game: { label: '游戏', fields: { platform: '平台', medium: '载体', edition: '版本', developer: '开发商', releaseDate: '发售日期' } },
@@ -67,6 +69,7 @@ class RequestError extends Error {
   constructor(responseStatus, body) {
     const messages = {
       unauthorized: '尚未验证身份，无法访问订购管理。',
+      holding_not_placeable: '无法摆放：请选择已收货、分类相符且未占用其他槽位的持有物。',
       purchase_closed: '该购买记录已收货或取消，请重新打开商品查看状态。',
       invalid_input: `提交内容无效${body.field ? `（${body.field}）` : ''}。`,
       unsupported_media_type: '文件类型不受支持。',
@@ -86,6 +89,11 @@ export function startManagement(apiOrigin) {
   const detail = byId('product-detail');
   let products = [];
   let holdings = [];
+  let room;
+  const scene = byId('private-room-scene');
+  const editors = byId('room-editors');
+  const shareLink = byId('room-share-link');
+  const shareToggle = byId('room-share-toggle');
   let coverUrl;
   let busy = false;
 
@@ -124,6 +132,8 @@ export function startManagement(apiOrigin) {
         root.hidden = true;
         reload.hidden = false;
         products = holdings = [];
+        room = undefined;
+        renderPrivateRoom();
         closeDetail();
         renderOverview();
         create.reset();
@@ -168,13 +178,54 @@ export function startManagement(apiOrigin) {
     }));
   }
 
+  function renderPrivateRoom() {
+    const token = room?.shareToken;
+    shareLink.hidden = !token;
+    if (token) {
+      shareLink.href = new URL(`/room/${token}`, window.location.origin);
+      shareLink.textContent = shareLink.href;
+    } else {
+      shareLink.removeAttribute('href');
+      shareLink.textContent = '';
+    }
+    byId('room-share-state').textContent = token
+      ? '分享已开启。拥有链接的访客只能查看摆出的收藏。'
+      : '房间不公开。开启分享后，仅摆出的收藏可通过链接查看。';
+    shareToggle.textContent = token ? '关闭分享' : '开启分享';
+    if (!room) {
+      scene.replaceChildren();
+      editors.replaceChildren();
+      return;
+    }
+    renderRoom(scene, room.slots, {
+      coverUrl: exhibit => exhibit.hasCover ? new URL(`/api/manage/products/${exhibit.productId}/cover`, apiOrigin) : null,
+      openProduct: id => void run(() => openProduct(id)),
+    });
+    renderSlotEditors(editors, room.slots, products, holdings, (slot, holdingId) => void run(async () => {
+      await api(`/room/slots/${slot}`, { method: 'PUT', json: { holdingId } });
+      room = await api('/room');
+      renderPrivateRoom();
+      return '槽位已保存。';
+    }));
+  }
+
+  shareToggle.addEventListener('click', () => void run(async () => {
+    const enabled = !room.shareToken;
+    const { shareToken } = await api('/room/share', { method: 'PUT', json: { enabled } });
+    room.shareToken = shareToken;
+    renderPrivateRoom();
+    return enabled ? '分享链接已生成。' : '分享已关闭，原链接已失效。';
+  }));
+
   async function loadManagement() {
     reload.hidden = false;
-    const [catalog, inventory] = await Promise.all([api('/products'), api('/holdings')]);
+    const [catalog, inventory, layout] = await Promise.all([api('/products'), api('/holdings'), api('/room')]);
     products = catalog.products;
     holdings = inventory.holdings;
+    room = layout;
     closeDetail();
     renderOverview();
+    renderPrivateRoom();
     root.hidden = false;
   }
 
@@ -203,6 +254,10 @@ export function startManagement(apiOrigin) {
     bind(upload, async data => {
       const updated = await attachCover(product.id, checkedCover(data.cover));
       await renderCover(area, updated);
+      if (room.slots.some(slot => slot.exhibit?.productId === product.id)) {
+        room = await api('/room');
+        renderPrivateRoom();
+      }
       return '封面已保存。';
     });
     area.append(upload);
@@ -278,6 +333,7 @@ export function startManagement(apiOrigin) {
         try {
           ({ holdings } = await api('/holdings'));
           renderOverview();
+          renderPrivateRoom();
         } catch (error) {
           if (error.status === 401 || error.status === 403) throw error;
           throw new Error('已确认收货，但未能刷新持有物，请重新加载管理数据。');

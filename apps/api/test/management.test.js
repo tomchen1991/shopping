@@ -45,6 +45,10 @@ function call(path, { method = 'GET', auth = alice, json, body, headers = {} } =
   return mf.dispatchFetch(`https://api.example/api/manage${path}`, init);
 }
 
+const put = (path, json, auth) => call(path, { method: 'PUT', json, auth });
+const visitor = (path, init) => mf.dispatchFetch(`https://api.example${path}`, init);
+const place = (slot, holdingId, auth) => put(`/room/slots/${slot}`, { holdingId }, auth);
+
 async function expect(response, status = 200) {
   const res = await response;
   const value = await res.json();
@@ -211,4 +215,103 @@ test('local R2 stores raster bytes and only a verified owner can attach or read 
   await expect(call(path, { auth: bob }), 404);
   await expect(call(path, { auth: null }), 401);
   await expect(call(`/covers/${id}`), 404);
+});
+
+async function order(product, auth) {
+  return expect(post(`/products/${product.id}/purchases`, { kind: 'regular', shop: '私有店铺', amountCents: 34300 }, auth), 201);
+}
+
+async function receiveHolding(purchase, auth) {
+  await expect(post(`/purchases/${purchase.id}/receive`, { receivedDate: '2026-11-21' }, auth));
+  const { holdings } = await expect(call('/holdings', { auth }));
+  return holdings.find(item => item.purchaseId === purchase.id);
+}
+
+test('room placement requires an owned received holding, matching slot category and no duplicate', async () => {
+  const electronics = await newProduct({ name: '显示器', category: 'electronics' });
+  const game = await newProduct({ name: '光盘', category: 'game' });
+  const figure = await newProduct({ name: '手办', category: 'figure' });
+  const pending = await order(figure);
+  const cancelled = await order(figure);
+  await expect(post(`/purchases/${cancelled.id}/cancel`));
+  assert.equal((await expect(call('/room'))).shareToken, null);
+  await expect(call('/room', { auth: null }), 401);
+  await expect(place('cabinet-1', 'a'.repeat(32), null), 401);
+  await expect(put('/room/share', { enabled: true }, null), 401);
+  await expect(put('/room/share', { enabled: 'true' }), 400);
+  for (const purchase of [pending, cancelled]) {
+    await expect(place('cabinet-1', purchase.id), 400);
+    // Even a legacy/imported holding pointing to a non-received order cannot be placed.
+    const db = await mf.getD1Database('DB');
+    const { id } = await db.prepare(`INSERT INTO holdings (owner_id, product_id, purchase_id, received_date)
+      VALUES (?, ?, ?, ?) RETURNING id`).bind('alice', figure.id, purchase.id, '2026-11-21').first();
+    await expect(place('cabinet-1', id), 409);
+    await db.prepare('DELETE FROM holdings WHERE id = ?').bind(id).run();
+  }
+  const display = await receiveHolding(await order(electronics));
+  const disc = await receiveHolding(await order(game));
+  const statue = await receiveHolding(await order(figure));
+  await expect(place('cabinet-1', display.id), 409);
+  await expect(place('somewhere', statue.id), 404);
+  await expect(place('cabinet-1', statue.id, bob), 409);
+  for (const [slot, item] of [['desk-1', display], ['shelf-2', disc], ['cabinet-1', statue]]) {
+    assert.deepEqual(await expect(place(slot, item.id)), { slot, holdingId: item.id });
+  }
+  await expect(place('cabinet-2', statue.id), 409);
+  const room = await expect(call('/room'));
+  assert.equal(room.slots.length, 6);
+  assert.deepEqual(room.slots.filter(slot => slot.exhibit).map(slot => [slot.slot, slot.category, slot.exhibit.productId]), [
+    ['desk-1', 'electronics', electronics.id], ['shelf-2', 'game', game.id], ['cabinet-1', 'figure', figure.id],
+  ]);
+  assert.ok((await expect(call('/room', { auth: bob }))).slots.every(slot => slot.exhibit === null));
+  for (const slot of ['desk-1', 'shelf-2', 'cabinet-1']) await expect(place(slot, null));
+});
+
+test('public share only exposes current slot metadata and covers; revocation and rotation invalidate old URLs', async () => {
+  const figure = await newProduct({ name: '公开手办', category: 'figure', interestReason: '私有备注', targetPriceCents: 12345 });
+  const privateFigure = await newProduct({ name: '未摆出的收藏', category: 'figure' });
+  const holding = await receiveHolding(await order(figure));
+  await receiveHolding(await order(privateFigure));
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aRUsAAAAASUVORK5CYII=', 'base64');
+  const coverIds = [];
+  for (const product of [figure, privateFigure]) {
+    const { id } = await expect(call('/covers', { method: 'POST', body: png, headers: { 'Content-Type': 'image/png' } }), 201);
+    coverIds.push(id);
+    await expect(put(`/products/${product.id}/cover`, { coverId: id }));
+  }
+  await expect(place('cabinet-1', holding.id));
+  await expect(visitor(`/api/public/rooms/${'0'.repeat(32)}`), 404);
+  const { shareToken } = await expect(put('/room/share', { enabled: true }));
+  const publicPath = `/api/public/rooms/${shareToken}`;
+  const coverPath = `${publicPath}/covers/cabinet-1`;
+  assert.equal((await expect(put('/room/share', { enabled: true }))).shareToken, shareToken);
+  const publicResponse = await visitor(publicPath, { headers: { Origin: webOrigin } });
+  assert.equal(publicResponse.status, 200);
+  assert.equal(publicResponse.headers.get('Cache-Control'), 'no-store');
+  assert.equal(publicResponse.headers.get('Access-Control-Allow-Origin'), webOrigin);
+  assert.equal(publicResponse.headers.get('Access-Control-Allow-Credentials'), null);
+  assert.deepEqual(await publicResponse.json(), { slots: [
+    { slot: 'desk-1', category: 'electronics', exhibit: null }, { slot: 'desk-2', category: 'electronics', exhibit: null },
+    { slot: 'shelf-1', category: 'game', exhibit: null }, { slot: 'shelf-2', category: 'game', exhibit: null },
+    { slot: 'cabinet-1', category: 'figure', exhibit: { name: figure.name, coverPath } },
+    { slot: 'cabinet-2', category: 'figure', exhibit: null },
+  ] });
+  const image = await visitor(coverPath);
+  assert.equal(image.status, 200);
+  assert.equal(image.headers.get('Cache-Control'), 'no-store');
+  assert.equal(image.headers.get('Content-Type'), 'image/png');
+  assert.deepEqual(Buffer.from(await image.arrayBuffer()), png);
+  for (const key of ['cabinet-2', privateFigure.id, coverIds[1]]) await expect(visitor(`${publicPath}/covers/${key}`), 404);
+  await expect(call(`/products/${privateFigure.id}/cover`, { auth: null }), 401);
+  await expect(place('cabinet-1', null));
+  await expect(visitor(coverPath), 404);
+  const empty = await expect(visitor(publicPath));
+  assert.ok(empty.slots.every(slot => slot.exhibit === null));
+  await expect(place('cabinet-1', holding.id));
+  assert.deepEqual(await expect(put('/room/share', { enabled: false })), { shareToken: null });
+  for (const path of [publicPath, coverPath]) await expect(visitor(path), 404);
+  const reopened = await expect(put('/room/share', { enabled: true }));
+  assert.notEqual(reopened.shareToken, shareToken);
+  await expect(visitor(`/api/public/rooms/${reopened.shareToken}`));
+  for (const path of [publicPath, coverPath]) await expect(visitor(path), 404);
 });

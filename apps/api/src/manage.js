@@ -1,4 +1,5 @@
 import { ApiError, date, invalid, jsonInput, paymentInput, productInput, purchaseInput, readBytes } from './input.js';
+import { coverKey, coverResponse } from './cover.js';
 
 const notFound = () => { throw new ApiError(404, 'not_found'); };
 const conflict = () => { throw new ApiError(409, 'purchase_closed'); };
@@ -22,7 +23,6 @@ const imageTypes = {
   'image/gif': bytes => ['GIF87a', 'GIF89a'].includes(ascii(bytes, 0, 6)),
 };
 const ascii = (bytes, start, end) => String.fromCharCode(...bytes.subarray(start, end));
-const coverKey = id => `covers/${id}`;
 
 export async function manage(request, env, ownerId, path, headers) {
   const { DB, COVERS } = env;
@@ -81,13 +81,7 @@ export async function manage(request, env, ownerId, path, headers) {
     if (sub === 'cover' && method === 'GET') {
       const row = await sql(`SELECT c.id, c.content_type FROM products p JOIN covers c
         ON c.id = p.cover_id AND c.owner_id = p.owner_id WHERE p.owner_id = ? AND p.id = ?`, ownerId, id).first();
-      if (!row) return notFound();
-      const object = await COVERS.get(coverKey(row.id));
-      if (!object) return notFound();
-      headers.set('Content-Type', row.content_type);
-      headers.set('X-Content-Type-Options', 'nosniff');
-      headers.set('Content-Security-Policy', "default-src 'none'; sandbox");
-      return new Response(object.body, { headers });
+      return (await coverResponse(COVERS, row, headers)) ?? notFound();
     }
     if (sub === 'purchases' && ['GET', 'POST'].includes(method)) {
       if (!(await product(id))) return notFound();

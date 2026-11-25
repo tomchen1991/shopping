@@ -1,0 +1,49 @@
+.room-scene {
+  position: relative;
+  max-width: 44rem;
+  margin-inline: auto;
+  container-type: inline-size;
+}
+.room-scene svg { display: block; width: 100%; height: auto; }
+.room-marker {
+  position: absolute;
+  transform: translate(-50%, -78%);
+  width: 15%;
+  box-sizing: border-box;
+  text-align: center;
+  padding: 0.25em;
+  border: 1px dashed #54776b;
+  border-radius: 0.5rem;
+  background: #f7faf2;
+  color: #213a31;
+  font-size: clamp(0.60rem, 2.25cqw, 0.9rem);
+  line-height: 1.25;
+}
+.room-marker.occupied { border-style: solid; box-shadow: 0 0.15rem 0.35rem #20332d35; }
+button.room-marker:hover { background: #ddf0e3; }
+.room-marker img {
+  display: block;
+  width: 100%;
+  height: clamp(1.1em, 5.5cqw, 2.5rem);
+  object-fit: contain;
+  margin-bottom: 0.15em;
+}
+.marker-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.room-marker small { display: block; color: #435b53; }
+.room-editors {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: 0.65rem;
+}
+.room-controls { padding: 0.75rem; border: 1px solid #cfdfd7; border-radius: 0.65rem; background: white; }
+.room-controls h4 { margin: 0; }
+.slot-editor { display: grid; gap: 0.35rem; margin-top: 0.6rem; }
+.slot-editor button { justify-self: start; }
+.slot-editor button:disabled { cursor: default; }
+.room-share { margin-top: 1rem; }
+.room-share p { margin-block: 0.4rem; }
+#room-share-link { display: inline-block; max-width: 100%; overflow-wrap: anywhere; color: #235944; }
+.public-home { color: #235944; }
+@media (max-width: 32rem) {
+  #room-management, #public-room { padding-inline: 0.55rem; }
+}
