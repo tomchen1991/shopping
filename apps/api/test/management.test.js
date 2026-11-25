@@ -146,6 +146,45 @@ test('purchase accounting and receipt are atomic and isolated', async () => {
   assert.deepEqual(await db.prepare('SELECT typeof(total_cents) AS type, total_cents AS total FROM purchases WHERE id = ?').bind(preorder.id).first(), { type: 'integer', total: 3003 });
 });
 
+test('fixed room accepts only matching received holdings; guest projection follows current placement', async () => {
+  const put = (path, json) => call(path, { method: 'PUT', json });
+  assert.equal((await expect(call('/room'))).shareToken, null);
+  const { shareToken } = await expect(put('/room/share', { enabled: true }));
+  const publicURL = `https://api.example/api/public/rooms/${shareToken}`;
+  const guest = () => mf.dispatchFetch(publicURL);
+  const coverURL = publicURL + '/covers/cabinet-2';
+  for (const [category, slot] of [['electronics', 'desk-2'], ['game', 'shelf-2'], ['figure', 'cabinet-2']]) {
+    const product = await newProduct({category, name: `示例-${category}`, interestReason: '私人笔记'});
+    const order = await expect(post(`/products/${product.id}/purchases`, {kind:'regular', shop:'私人店', amountCents:314}), 201);
+    const path = `/room/slots/${slot}`;
+    await expect(put(path, {holdingId:order.id}), 409);
+    await expect(post(`/purchases/${order.id}/receive`, {receivedDate:'2025-06-01'}));
+    const holding = (await expect(call('/holdings'))).holdings.find(h => h.purchaseId === order.id);
+    await expect(put(path, {holdingId:holding.id}));
+    const room = await expect(guest());
+    assert.deepEqual(Object.keys(room), ['slots']);
+    assert.deepEqual(room.slots.find(s => s.slot === slot), {slot, category, exhibit:{name:product.name, coverPath:null}});
+  }
+  const product = await newProduct({category:'figure',name:'未展示手办'});
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+Xjb0AAAAASUVORK5CYII=', 'base64');
+  const { id } = await expect(call('/covers', {method:'POST', body:png, headers:{'Content-Type':'image/png'}}),201);
+  await expect(put(`/products/${product.id}/cover`, {coverId:id}));
+  const cancelled = await expect(post(`/products/${product.id}/purchases`, {kind:'regular', shop:'隐藏店', amountCents:4}),201);
+  await expect(post(`/purchases/${cancelled.id}/cancel`));
+  await expect(put('/room/slots/cabinet-2', {holdingId:cancelled.id}),409);
+  for (const key of [id, product.id, 'cabinet-1']) assert.equal((await mf.dispatchFetch(`${publicURL}/covers/${key}`)).status,404);
+  assert.ok(!JSON.stringify(await expect(guest())).includes(product.name));
+  const displayed = (await expect(call('/products'))).products.find(p => p.name === '示例-figure');
+  await expect(put(`/products/${displayed.id}/cover`, {coverId:id}));
+  const image = await mf.dispatchFetch(coverURL);
+  assert.equal(image.status,200);
+  assert.equal(image.headers.get('Cache-Control'),'no-store');
+  assert.deepEqual(Buffer.from(await image.arrayBuffer()),png);
+  await expect(put('/room/share', {enabled:false}));
+  assert.equal((await guest()).status,404);
+  assert.equal((await mf.dispatchFetch(coverURL)).status,404);
+});
+
 test('local R2 stores raster bytes and only a verified owner can attach or read them', async () => {
   const product = await newProduct();
   const bobsProduct = await newProduct({ name: 'Bob', category: 'game' }, bob);

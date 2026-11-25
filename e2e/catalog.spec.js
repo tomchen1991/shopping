@@ -73,6 +73,56 @@ test('preorder deposit and balance, receipt, and cancellation persist independen
   await expect(holdings.filter({hasText:name})).toHaveCount(1);
 });
 
+test('received preorder moves from private catalog to a revocable public figure exhibit', async ({ page, browser }) => {
+  await openPrivatePage(page);
+  const name = await addProduct(page, 'figure', { character: '星海旅人' }, true);
+  const detail = await inspect(page, name);
+  const form = detail.locator('form').filter({has:page.getByRole('button',{name:'登记购买'})});
+  await form.getByLabel('购买类型').selectOption('preorder');
+  await form.getByLabel('店铺').fill('私人预订店');
+  await form.getByLabel('定金').fill('12.34');
+  await form.getByRole('button').click();
+  const card = detail.getByRole('article').filter({hasText:'私人预订店'});
+  await card.getByLabel('尾款').fill('56.78');
+  await card.getByRole('button',{name:'保存付款金额'}).click();
+  await expect(card).toContainText('CNY 69.12');
+  await card.getByLabel('收货日期').fill('2025-06-02');
+  await card.getByRole('button',{name:'确认收货'}).click();
+  await expect(page.locator('#holdings-list')).toContainText(name);
+  const slot = page.getByLabel('展示柜 1', {exact:true});
+  await slot.selectOption({label:`${name} · 2025-06-02`});
+  await page.locator('form').filter({has:slot}).getByRole('button',{name:'保存槽位'}).click();
+  const exhibit = page.getByRole('button',{name:new RegExp(`展示柜 1：${name}`)});
+  await expect(exhibit).toBeVisible();
+  await page.reload();
+  await exhibit.click();
+  await expect(detail).toContainText('星海旅人');
+  await expect(detail).toContainText(name);
+  await expect(page.locator('#room-share-link')).toBeHidden();
+  await page.getByRole('button',{name:'开启分享'}).click();
+  const link = page.locator('#room-share-link');
+  await expect(link).toBeVisible();
+  const visitor = await browser.newContext();
+  try {
+    const guest = await visitor.newPage();
+    await guest.goto(await link.evaluate(a => a.href));
+    const scene = guest.locator('#public-room-scene');
+    await expect(scene).toContainText(name);
+    const image = scene.getByRole('img',{name:`${name}封面`});
+    await expect.poll(() => image.evaluate(img => img.naturalWidth)).toBeGreaterThan(0);
+    const imageURL = await image.evaluate(img => img.src);
+    await expect(guest.locator('body')).not.toContainText('私人预订店');
+    await page.getByRole('button',{name:'关闭分享'}).click();
+    await expect(link).toBeHidden();
+    await guest.reload();
+    await expect(guest.locator('#public-room-status')).toContainText('链接已失效');
+    await expect(scene).not.toContainText(name);
+    expect((await guest.request.get(imageURL)).status()).toBe(404);
+  } finally {
+    await visitor.close();
+  }
+});
+
 test('three categories retain specific fields and a locally selected cover', async ({ page }) => {
   await openPrivatePage(page);
   const rows = [];
