@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="no-referrer" />
     <meta name="description" content="记录电子产品、游戏与手办的购买进度。" />
     <title>订购小屋</title>
     <script type="module" src="/src/main.js"></script>
@@ -12,12 +13,29 @@
       <p class="eyebrow">个人订购管理</p>
       <h1>订购小屋</h1>
       <p class="intro">记录电子产品、游戏与手办，把到手的收藏布置进可分享的小屋。</p>
-      <section aria-labelledby="manage-title">
+      <section id="public-room" aria-labelledby="public-room-title" hidden>
+        <h2 id="public-room-title">公开收藏房间</h2>
+        <p id="public-room-status" role="status" aria-atomic="true">正在加载房间…</p>
+        <div id="public-room-scene" class="room-scene" role="group" aria-label="公开等距房间"></div>
+        <a class="public-home" href="/">返回首页</a>
+      </section>
+      <section id="management-panel" aria-labelledby="manage-title">
         <h2 id="manage-title">订购管理</h2>
         <p id="manage-status" role="status" aria-atomic="true">正在检查管理会话…</p>
         <button type="button" id="reload-management" hidden>重新加载管理数据</button>
         <fieldset id="management" hidden>
           <legend class="sr-only">私有管理</legend>
+          <section id="room-management" aria-labelledby="room-title">
+            <h3 id="room-title">我的收藏房间</h3>
+            <p>桌面摆电子产品，媒体架放游戏，展示柜陈列手办。只有已收货的商品可以摆出。</p>
+            <div id="private-room-scene" class="room-scene" role="group" aria-label="我的等距房间"></div>
+            <div id="room-editors" class="room-editors"></div>
+            <div class="room-share">
+              <p id="room-share-state"></p>
+              <button id="room-share-toggle" type="button">开启分享</button>
+              <p><a id="room-share-link" hidden></a></p>
+            </div>
+          </section>
           <section aria-labelledby="create-title">
             <h3 id="create-title">添加感兴趣的商品</h3>
             <form id="create-product" class="fields">

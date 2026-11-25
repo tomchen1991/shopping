@@ -1,7 +1,9 @@
 import { ApiError } from './input.js';
 import { manage } from './manage.js';
+import { manageRoom, publicRoom } from './room.js';
 
 const managePrefix = '/api/manage';
+const publicPrefix = '/api/public/rooms';
 
 // resolveIdentity(request, env) must return a verified, stable { subject } or null.
 // Only the composition entry point can supply an adapter, never a request or binding.
@@ -22,6 +24,16 @@ export function createWorker({ resolveIdentity } = {}) {
         }
         return json({ status: 'ok' });
       }
+      if (pathname.startsWith(`${publicPrefix}/`)) {
+        headers.set('Referrer-Policy', 'no-referrer');
+        try {
+          return await publicRoom(request, env, pathname.slice(publicPrefix.length), headers);
+        } catch (error) {
+          if (error instanceof ApiError) return json({ error: error.message }, error.status);
+          console.error('Public room request failed', error?.name);
+          return json({ error: 'internal_error' }, 500);
+        }
+      }
       if (pathname !== managePrefix && !pathname.startsWith(`${managePrefix}/`)) {
         return json({ error: 'not_found' }, 404);
       }
@@ -39,7 +51,9 @@ export function createWorker({ resolveIdentity } = {}) {
         if (typeof identity?.subject !== 'string' || !identity.subject.trim()) {
           return json({ error: 'unauthorized' }, 401);
         }
-        return await manage(request, env, identity.subject, pathname.slice(managePrefix.length), headers);
+        const path = pathname.slice(managePrefix.length);
+        const handler = path === '/room' || path.startsWith('/room/') ? manageRoom : manage;
+        return await handler(request, env, identity.subject, path, headers);
       } catch (error) {
         if (error instanceof ApiError) {
           return json({ error: error.message, ...(error.field && { field: error.field }) }, error.status);

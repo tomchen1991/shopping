@@ -1,5 +1,6 @@
 import './style.css';
 import { startManagement } from './management.js';
+import { startPublicRoom } from './room.js';
 
 const apiOrigin = import.meta.env.VITE_API_BASE_URL
   || (import.meta.env.DEV ? 'http://127.0.0.1:8787' : window.location.origin);
@@ -28,6 +29,13 @@ async function checkHealth() {
   }
 }
 
-checkButton.addEventListener('click', checkHealth);
-void checkHealth();
-startManagement(apiOrigin);
+const roomPath = /^\/room(?:\/(.*))?$/.exec(window.location.pathname);
+if (roomPath) {
+  document.getElementById('management-panel').hidden = true;
+  document.querySelector('.health').hidden = true;
+  void startPublicRoom(apiOrigin, roomPath[1] ?? '');
+} else {
+  checkButton.addEventListener('click', checkHealth);
+  void checkHealth();
+  startManagement(apiOrigin);
+}
