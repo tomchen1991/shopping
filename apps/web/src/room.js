@@ -1,10 +1,13 @@
 import './room.css';
+import { createRoomStage } from './room-3d.js';
 
 const furniture = [
-  { name: '桌面', category: '电子产品', slots: [['desk-1', 2, 12, 3], ['desk-2', 6, 9, 3]] },
-  { name: '媒体架', category: '游戏', slots: [['shelf-1', 9.5, 3.1, 4], ['shelf-2', 15, 1.6, 4]] },
-  { name: '展示柜', category: '手办', slots: [['cabinet-1', 12, 11.5, 3], ['cabinet-2', 16, 8, 3]] },
+  { name: '桌面', zone: 'electronics', category: '电子产品', slots: [['desk-1', 12, 58], ['desk-2', 28, 72]] },
+  { name: '媒体架', zone: 'game', category: '游戏', slots: [['shelf-1', 42, 34], ['shelf-2', 56, 48]] },
+  { name: '展示柜', zone: 'figure', category: '手办', slots: [['cabinet-1', 76, 32], ['cabinet-2', 76, 56]] },
 ];
+
+const stages = new WeakMap();
 
 function el(tag, text, attrs = {}) {
   const node = document.createElement(tag);
@@ -13,84 +16,137 @@ function el(tag, text, attrs = {}) {
   return node;
 }
 
-const project = (x, y, z = 0) => [335 + (x - y) * 17, 89 + (x + y) * 9 - z * 12];
-
-function backdrop() {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('viewBox', '0 0 680 410');
-  svg.setAttribute('aria-hidden', 'true');
-  const face = (fill, points) => {
-    const polygon = document.createElementNS(svg.namespaceURI, 'polygon');
-    polygon.setAttribute('fill', fill);
-    polygon.setAttribute('points', points.map(point => project(...point).join(',')).join(' '));
-    svg.append(polygon);
-  };
-  const slab = (x, y, w, d, z, h, [top, left, right]) => {
-    face(left, [[x, y + d, z], [x + w, y + d, z], [x + w, y + d, z + h], [x, y + d, z + h]]);
-    face(right, [[x + w, y, z], [x + w, y + d, z], [x + w, y + d, z + h], [x + w, y, z + h]]);
-    face(top, [[x, y, z + h], [x + w, y, z + h], [x + w, y + d, z + h], [x, y + d, z + h]]);
-  };
-  slab(0, 0, 18, 15, -0.7, 0.7, ['#e9dec6', '#bba182', '#ab8e6f']);
-  face('#dce9dc', [[0, 0], [18, 0], [18, 0, 6.2], [0, 0, 6.2]]);
-  face('#c5d9ce', [[0, 0], [0, 15], [0, 15, 6.2], [0, 0, 6.2]]);
-  face('#f8f6dd', [[0, 3, 2], [0, 8, 2], [0, 8, 5.2], [0, 3, 5.2]]);
-  face('#aaccc9', [[0, 3.3, 2.3], [0, 7.7, 2.3], [0, 7.7, 4.9], [0, 3.3, 4.9]]);
-  face('#d7e5d6', [[0, 5.45, 2.3], [0, 5.65, 2.3], [0, 5.65, 4.9], [0, 5.45, 4.9]]);
-  for (let x = 0; x < 18; x += 3) {
-    for (let y = 0; y < 15; y += 3) {
-      if ((x + y) % 2) face('#f1e7d3', [[x, y], [x + 3, y], [x + 3, y + 3], [x, y + 3]]);
-    }
-  }
-  // Media shelves at the back, a free-standing desk, then the foreground cabinet.
-  const wood = ['#ba8e65', '#936748', '#77503a'];
-  slab(8.8, 0.8, 7, 0.4, 0, 4.3, wood);
-  for (const z of [0.3, 1.9, 3.6]) slab(8.8, 1.2, 7, 2.9, z, 0.4, wood);
-  for (const x of [8.8, 15.45]) slab(x, 1.2, 0.35, 2.9, 0, 4.3, wood);
-  for (const [x, y] of [[1.3, 8.4], [6.4, 8.4], [1.3, 13], [6.4, 13]]) slab(x, y, 0.45, 0.45, 0, 2.7, wood);
-  slab(1, 8, 6.1, 5.8, 2.7, 0.45, ['#dbb787', '#b4885f', '#97734e']);
-  const cabinet = ['#a8cec1', '#6b9c8d', '#517c71'];
-  slab(11, 7, 6.3, 6, 0, 1.1, cabinet);
-  slab(11, 7, 6.3, 0.35, 1.1, 2.6, cabinet);
-  slab(11, 7.35, 0.35, 5.65, 1.1, 2.6, cabinet);
-  slab(11.35, 7.35, 5.95, 5.65, 2.7, 0.35, ['#c3dfd2', '#80ab9e', '#619082']);
-  return svg;
+export function setRoomTheme(sceneEl, theme) {
+  stages.get(sceneEl)?.stage?.setTheme(theme);
 }
 
-export function renderRoom(scene, slots, { coverUrl, openProduct } = {}) {
-  scene.replaceChildren(backdrop());
+export function setRoomCamera(sceneEl, preset) {
+  stages.get(sceneEl)?.stage?.setCameraPreset(preset);
+}
+
+export function setRoomZone(sceneEl, zone) {
+  stages.get(sceneEl)?.stage?.setZoneFocus(zone);
+}
+
+export function destroyRoom(sceneEl) {
+  const record = stages.get(sceneEl);
+  if (record) {
+    record.stage?.dispose();
+    stages.delete(sceneEl);
+  }
+  sceneEl.replaceChildren();
+}
+
+export function renderRoom(sceneEl, slots, { coverUrl, openProduct } = {}) {
+  let record = stages.get(sceneEl);
+  if (!record) {
+    sceneEl.replaceChildren();
+    const overlay = el('div', null, { class: 'room-overlay' });
+    const hint = el('div', '拖拽旋转 3D 视角 · 滚轮缩放 · 点击展品检视详情', { class: 'room-hud-hint' });
+    sceneEl.append(overlay, hint);
+    record = { overlay, markers: new Map(), openProduct, stage: null };
+    try {
+      record.stage = createRoomStage(sceneEl, {
+        onSelectSlot(slotId) {
+          const exhibit = record.slots?.find(entry => entry.slot === slotId)?.exhibit;
+          if (exhibit && record.openProduct) record.openProduct(exhibit.productId);
+        },
+        onHoverSlot(slotId) {
+          for (const [id, marker] of record.markers.entries()) {
+            marker.classList.toggle('is-hovered', id === slotId);
+          }
+        },
+        onProject(projected) {
+          for (const [id, marker] of record.markers.entries()) {
+            const point = projected[id];
+            if (!point || !point.visible) {
+              marker.classList.add('is-offscreen');
+              continue;
+            }
+            marker.classList.remove('is-offscreen');
+            marker.style.left = `${point.x}px`;
+            marker.style.top = `${point.y}px`;
+          }
+        },
+      });
+    } catch {
+      sceneEl.dataset.fallback = 'true';
+    }
+    stages.set(sceneEl, record);
+  }
+
+  record.openProduct = openProduct;
+  record.slots = slots;
+  record.markers.clear();
+  record.overlay.replaceChildren();
+
+  const stageExhibits = [];
+
   for (const group of furniture) {
-    for (const [index, [id, x, y, z]] of group.slots.entries()) {
-      const exhibit = slots.find(entry => entry.slot === id)?.exhibit;
+    for (const [index, [id, fallbackX, fallbackY]] of group.slots.entries()) {
+      const exhibit = slots.find(entry => entry.slot === id)?.exhibit ?? null;
       const label = `${group.name} ${index + 1}`;
       const interactive = exhibit && openProduct;
       const marker = el(interactive ? 'button' : 'div', null, {
         class: `room-marker${exhibit ? ' occupied' : ''}`,
+        'data-slot': id,
+        'data-zone': group.zone,
         ...(interactive && { type: 'button', 'aria-label': `${label}：${exhibit.name}（查看商品详情）` }),
       });
-      const [px, py] = project(x, y, z);
-      marker.style.left = `${px / 6.8}%`;
-      marker.style.top = `${py / 4.1}%`;
+
+      if (!record.stage) {
+        marker.style.left = `${fallbackX}%`;
+        marker.style.top = `${fallbackY}%`;
+      }
+
+      let imageEl = null;
       const src = exhibit && coverUrl?.(exhibit);
       if (src) {
-        const image = el('img', null, { alt: `${exhibit.name}封面`, referrerpolicy: 'no-referrer',
-          crossorigin: interactive ? 'use-credentials' : 'anonymous' });
-        image.addEventListener('error', () => { image.hidden = true; });
-        image.src = src;
-        marker.append(image);
+        imageEl = el('img', null, {
+          alt: `${exhibit.name}封面`,
+          referrerpolicy: 'no-referrer',
+          crossorigin: interactive ? 'use-credentials' : 'anonymous',
+        });
+        imageEl.addEventListener('load', () => {
+          record.stage?.refreshSlotTexture(id, imageEl);
+        });
+        imageEl.addEventListener('error', () => { imageEl.hidden = true; });
+        imageEl.src = src;
+        marker.append(imageEl);
       }
-      marker.append(el('span', exhibit?.name ?? '空位', { class: 'marker-name' }), el('small', label));
+
+      const meta = el('span', null, { class: 'marker-meta' });
+      meta.append(el('span', exhibit?.name ?? '空位', { class: 'marker-name' }), el('small', label));
+      marker.append(meta);
+
       if (interactive) marker.addEventListener('click', () => openProduct(exhibit.productId));
-      scene.append(marker);
+      marker.addEventListener('mouseenter', () => record.stage?.setHoveredSlot(id));
+      marker.addEventListener('mouseleave', () => record.stage?.setHoveredSlot(null));
+
+      record.overlay.append(marker);
+      record.markers.set(id, marker);
+      stageExhibits.push({
+        slot: id,
+        exhibit: exhibit ? { ...exhibit, imageEl } : null,
+      });
     }
   }
+
+  record.stage?.setExhibits(stageExhibits);
 }
 
-export function renderSlotEditors(root, slots, products, holdings, save) {
+export function renderSlotEditors(root, slots, products, holdings, save, { onZoneHover } = {}) {
   const placed = new Set(slots.map(entry => entry.exhibit?.holdingId));
   const productById = new Map(products.map(product => [product.id, product]));
   root.replaceChildren(...furniture.map(group => {
-    const panel = el('div', null, { class: 'room-controls' });
-    panel.append(el('h4', `${group.name} · ${group.category}`));
+    const panel = el('div', null, { class: 'room-controls', 'data-zone': group.zone });
+    const head = el('div', null, { class: 'room-controls-head' });
+    head.append(el('h4', group.name), el('span', group.category, { class: 'zone-chip' }));
+    panel.append(head);
+    if (onZoneHover) {
+      panel.addEventListener('mouseenter', () => onZoneHover(group.zone));
+      panel.addEventListener('mouseleave', () => onZoneHover(null));
+    }
     for (const [index, [id]] of group.slots.entries()) {
       const slot = slots.find(entry => entry.slot === id);
       const current = slot.exhibit?.holdingId;
@@ -104,7 +160,7 @@ export function renderSlotEditors(root, slots, products, holdings, save) {
         select.append(el('option', `${product.name} · ${item.receivedDate}`, { value: item.id }));
       }
       select.value = current || '';
-      const submit = el('button', '保存槽位', { class: 'secondary', disabled: '' });
+      const submit = el('button', '保存槽位', { class: 'secondary btn-sm', disabled: '' });
       select.addEventListener('change', () => { submit.disabled = select.value === (current ?? ''); });
       form.addEventListener('submit', event => {
         event.preventDefault();
@@ -118,13 +174,32 @@ export function renderSlotEditors(root, slots, products, holdings, save) {
   }));
 }
 
+export function bindRoomToolbar(scopeEl, sceneEl) {
+  if (!scopeEl) return;
+  for (const btn of scopeEl.querySelectorAll('[data-camera]')) {
+    btn.addEventListener('click', () => {
+      for (const b of scopeEl.querySelectorAll('[data-camera]')) b.classList.toggle('active', b === btn);
+      setRoomCamera(sceneEl, btn.dataset.camera);
+    });
+  }
+  for (const btn of scopeEl.querySelectorAll('[data-lighting]')) {
+    btn.addEventListener('click', () => {
+      for (const b of scopeEl.querySelectorAll('[data-lighting]')) b.classList.toggle('active', b === btn);
+      setRoomTheme(sceneEl, btn.dataset.lighting);
+    });
+  }
+}
+
 export async function startPublicRoom(apiUrl, token) {
   const resolveUrl = typeof apiUrl === 'function' ? apiUrl : path => new URL(path, apiUrl).toString();
   const panel = document.getElementById('public-room');
+  const sceneEl = document.getElementById('public-room-scene');
   panel.hidden = false;
+  bindRoomToolbar(panel, sceneEl);
   const status = document.getElementById('public-room-status');
   try {
     if (!/^[a-f0-9]{32}$/.test(token)) {
+      destroyRoom(sceneEl);
       status.textContent = '此房间未公开或链接已失效。';
       return;
     }
@@ -132,16 +207,18 @@ export async function startPublicRoom(apiUrl, token) {
       credentials: 'omit', signal: AbortSignal.timeout(10000), referrerPolicy: 'no-referrer',
     });
     if (response.status === 404) {
+      destroyRoom(sceneEl);
       status.textContent = '此房间未公开或链接已失效。';
       return;
     }
     if (!response.ok) throw new Error('Room unavailable');
     const { slots } = await response.json();
-    renderRoom(document.getElementById('public-room-scene'), slots, {
+    renderRoom(sceneEl, slots, {
       coverUrl: exhibit => exhibit.coverPath ? resolveUrl(exhibit.coverPath) : null,
     });
     status.textContent = slots.some(slot => slot.exhibit) ? '仅展示房间内公开摆放的收藏。' : '这间小屋还没有摆出收藏。';
   } catch {
+    destroyRoom(sceneEl);
     status.textContent = '暂时无法加载房间，请刷新重试。';
   }
 }

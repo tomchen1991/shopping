@@ -4,81 +4,221 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="referrer" content="no-referrer" />
-    <meta name="description" content="记录电子产品、游戏与手办的购买进度。" />
-    <title>订购小屋</title>
+    <meta name="description" content="记录电子产品、游戏与手办的购买进度，布置并分享专属 3D 等距收藏空间。" />
+    <title>订购小屋 · Collector's 3D Studio</title>
     <script type="module" src="/src/main.js"></script>
   </head>
   <body>
-    <main>
-      <p class="eyebrow">个人订购管理</p>
-      <h1>订购小屋</h1>
-      <p class="intro">记录电子产品、游戏与手办，把到手的收藏布置进可分享的小屋。</p>
-      <section id="public-room" aria-labelledby="public-room-title" hidden>
-        <h2 id="public-room-title">公开收藏房间</h2>
-        <p id="public-room-status" role="status" aria-atomic="true">正在加载房间…</p>
-        <div id="public-room-scene" class="room-scene" role="group" aria-label="公开等距房间"></div>
-        <a class="public-home" href="/">返回首页</a>
+    <div class="ambient-backdrop" aria-hidden="true"></div>
+    <main class="app-shell">
+      <header class="masthead">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 40 40" fill="none">
+            <path d="M20 3.5L35.5 12.5V27.5L20 36.5L4.5 27.5V12.5L20 3.5Z" fill="currentColor" fill-opacity="0.12" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M20 3.5V20M20 20L35.5 12.5M20 20L4.5 12.5M20 20V36.5" stroke="currentColor" stroke-width="1.4" stroke-opacity="0.72"/>
+            <circle cx="20" cy="20" r="2.8" fill="currentColor"/>
+          </svg>
+        </div>
+        <div class="masthead-copy">
+          <p class="eyebrow">个人订购管理 · COLLECTOR'S 3D STUDIO</p>
+          <h1>订购小屋</h1>
+          <p class="intro">记录电子产品、游戏与手办的每一次心动与预订，把到手的藏品真实陈列进可交互的 3D 收藏空间。</p>
+        </div>
+      </header>
+
+      <section id="public-room" class="surface-card showcase-card" aria-labelledby="public-room-title" hidden>
+        <div class="section-head">
+          <div>
+            <span class="kicker">PUBLIC 3D EXHIBITION · 访客展厅</span>
+            <h2 id="public-room-title">公开收藏房间</h2>
+            <p id="public-room-status" class="status-line" role="status" aria-atomic="true">正在加载房间…</p>
+          </div>
+          <div class="room-toolbar">
+            <div class="segmented-control" role="group" aria-label="视角切换">
+              <button type="button" class="seg-btn active" data-camera="overview">全景视角</button>
+              <button type="button" class="seg-btn" data-camera="electronics">桌面 · 电子</button>
+              <button type="button" class="seg-btn" data-camera="game">媒体架 · 游戏</button>
+              <button type="button" class="seg-btn" data-camera="figure">展示柜 · 手办</button>
+            </div>
+            <div class="segmented-control" role="group" aria-label="展厅灯光">
+              <button type="button" class="seg-btn active" data-lighting="day">☀ 午后暖阳</button>
+              <button type="button" class="seg-btn" data-lighting="night">☾ 深夜霓虹</button>
+              <button type="button" class="seg-btn" data-lighting="gallery">✦ 展馆聚光</button>
+            </div>
+          </div>
+        </div>
+        <div class="room-stage-shell">
+          <div id="public-room-scene" class="room-scene" role="group" aria-label="公开等距房间"></div>
+        </div>
+        <div class="public-footer">
+          <span>仅展示房主公开摆放的已入库藏品，不包含购买店铺或价格信息。</span>
+          <a class="public-home" href="/">返回首页</a>
+        </div>
       </section>
-      <section id="management-panel" aria-labelledby="manage-title">
-        <h2 id="manage-title">订购管理</h2>
-        <p id="manage-status" role="status" aria-atomic="true">正在检查管理会话…</p>
+
+      <section id="management-panel" class="surface-card management-shell" aria-labelledby="manage-title">
+        <div class="session-bar">
+          <div class="session-copy">
+            <span class="kicker">PRIVATE ARCHIVE</span>
+            <div class="session-title-row">
+              <h2 id="manage-title">订购管理</h2>
+              <p id="manage-status" class="status-line" role="status" aria-atomic="true">正在检查管理会话…</p>
+            </div>
+          </div>
+          <div class="session-actions">
+            <button type="button" id="reload-management" class="secondary btn-sm" hidden>重新加载管理数据</button>
+            <button type="button" id="auth-logout" class="secondary btn-sm" hidden>退出登录</button>
+          </div>
+        </div>
+
         <form id="auth-login" class="inline-form auth-login" hidden>
           <label>验证码或恢复码
             <input name="code" type="text" autocomplete="one-time-code" autocapitalize="off" spellcheck="false" maxlength="64" placeholder="6 位数字验证码或 32 位恢复码" required>
           </label>
           <button type="submit">登录</button>
         </form>
-        <div class="session-actions">
-          <button type="button" id="reload-management" hidden>重新加载管理数据</button>
-          <button type="button" id="auth-logout" class="secondary" hidden>退出登录</button>
-        </div>
+
         <fieldset id="management" hidden>
           <legend class="sr-only">私有管理</legend>
-          <section id="room-management" aria-labelledby="room-title">
-            <h3 id="room-title">我的收藏房间</h3>
-            <p>桌面摆电子产品，媒体架放游戏，展示柜陈列手办。只有已收货的商品可以摆出。</p>
-            <div id="private-room-scene" class="room-scene" role="group" aria-label="我的等距房间"></div>
-            <div id="room-editors" class="room-editors"></div>
-            <div class="room-share">
-              <p id="room-share-state"></p>
-              <button id="room-share-toggle" type="button">开启分享</button>
-              <p><a id="room-share-link" hidden></a></p>
+
+          <div class="metrics-grid" aria-label="馆藏统计">
+            <div class="metric-tile">
+              <span class="metric-label">心愿单商品</span>
+              <strong id="metric-products" class="metric-value">0</strong>
+              <span class="metric-hint">电子 · 游戏 · 手办</span>
+            </div>
+            <div class="metric-tile">
+              <span class="metric-label">已入库持有物</span>
+              <strong id="metric-holdings" class="metric-value">0</strong>
+              <span class="metric-hint">确认收货自动入库</span>
+            </div>
+            <div class="metric-tile">
+              <span class="metric-label">3D 房间展位</span>
+              <strong id="metric-placed" class="metric-value">0 / 6</strong>
+              <span class="metric-hint">桌面 · 媒体架 · 玻璃展示柜</span>
+            </div>
+            <div class="metric-tile">
+              <span class="metric-label">公开分享状态</span>
+              <strong id="metric-share" class="metric-value">仅自己可见</strong>
+              <span class="metric-hint">支持随时生成或撤销链接</span>
+            </div>
+          </div>
+
+          <section id="room-management" class="sub-card showcase-card" aria-labelledby="room-title">
+            <div class="section-head">
+              <div>
+                <span class="kicker">3D COLLECTOR ROOM · 三维微缩展示室</span>
+                <h3 id="room-title">我的收藏房间</h3>
+                <p class="section-desc">电子产品摆在桌面，游戏陈列在媒体架，手办供奉在带灯玻璃展示柜。只有已收货的商品可以摆出。</p>
+              </div>
+              <div class="room-toolbar">
+                <div class="segmented-control" role="group" aria-label="3D 视角预设">
+                  <button type="button" class="seg-btn active" data-camera="overview">全景视角</button>
+                  <button type="button" class="seg-btn" data-camera="electronics">桌面 · 电子</button>
+                  <button type="button" class="seg-btn" data-camera="game">媒体架 · 游戏</button>
+                  <button type="button" class="seg-btn" data-camera="figure">展示柜 · 手办</button>
+                </div>
+                <div class="segmented-control" role="group" aria-label="3D 灯光氛围">
+                  <button type="button" class="seg-btn active" data-lighting="day">☀ 午后暖阳</button>
+                  <button type="button" class="seg-btn" data-lighting="night">☾ 深夜霓虹</button>
+                  <button type="button" class="seg-btn" data-lighting="gallery">✦ 展馆聚光</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="room-studio-layout">
+              <div class="room-stage-col">
+                <div class="room-stage-shell">
+                  <div id="private-room-scene" class="room-scene" role="group" aria-label="我的等距房间"></div>
+                </div>
+                <div class="room-share">
+                  <div class="room-share-top">
+                    <p id="room-share-state"></p>
+                    <div class="room-share-actions">
+                      <button id="room-share-toggle" type="button">开启分享</button>
+                      <button id="copy-share-link" type="button" class="secondary" hidden>复制链接</button>
+                    </div>
+                  </div>
+                  <p><a id="room-share-link" hidden></a></p>
+                </div>
+              </div>
+
+              <div class="room-console">
+                <div id="room-editors" class="room-editors"></div>
+              </div>
             </div>
           </section>
-          <section aria-labelledby="create-title">
-            <h3 id="create-title">添加感兴趣的商品</h3>
-            <form id="create-product" class="fields">
-              <label>商品名称<input name="name" maxlength="200" required></label>
-              <label>分类<select name="category">
-                <option value="electronics">电子产品</option>
-                <option value="game">游戏</option>
-                <option value="figure">手办</option>
-              </select></label>
-              <div id="category-fields" class="fields wide" role="group" aria-label="分类信息"></div>
-              <label>商品链接<input name="link" type="url" maxlength="2048"></label>
-              <label>目标价（CNY）<input name="targetPriceCents" inputmode="decimal"></label>
-              <label>标签（逗号分隔）<input name="tags" maxlength="1530"></label>
-              <label>感兴趣的原因<textarea name="interestReason" maxlength="2000"></textarea></label>
-              <label class="wide">本地封面（可选，最大 5 MiB）<input name="cover" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
-              <div class="wide"><button>添加商品</button></div>
-            </form>
-          </section>
-          <section aria-labelledby="products-title">
-            <h3 id="products-title">感兴趣的商品</h3>
-            <div id="product-list"></div>
-          </section>
-          <section id="product-detail" aria-label="商品详情" hidden></section>
-          <section aria-labelledby="holdings-title">
-            <h3 id="holdings-title">持有物</h3>
-            <p id="holdings-count"></p>
-            <ul id="holdings-list"></ul>
-          </section>
+
+          <div class="workspace-grid">
+            <div class="workspace-col">
+              <section class="sub-card" aria-labelledby="products-title">
+                <div class="panel-head">
+                  <div>
+                    <span class="kicker">CATALOG</span>
+                    <h3 id="products-title">感兴趣的商品</h3>
+                  </div>
+                  <div id="catalog-filter" class="segmented-control" role="group" aria-label="商品分类筛选">
+                    <button type="button" class="seg-btn active" data-category="all">全部</button>
+                    <button type="button" class="seg-btn" data-category="electronics">电子产品</button>
+                    <button type="button" class="seg-btn" data-category="game">游戏</button>
+                    <button type="button" class="seg-btn" data-category="figure">手办</button>
+                  </div>
+                </div>
+                <div id="product-list"></div>
+              </section>
+
+              <section class="sub-card" aria-labelledby="holdings-title">
+                <div class="panel-head">
+                  <div>
+                    <span class="kicker">VAULT</span>
+                    <h3 id="holdings-title">持有物</h3>
+                  </div>
+                  <p id="holdings-count" class="count-pill"></p>
+                </div>
+                <ul id="holdings-list" class="holdings-list"></ul>
+              </section>
+            </div>
+
+            <div class="workspace-col">
+              <section id="product-detail" class="sub-card detail-card" aria-label="商品详情" hidden></section>
+
+              <section class="sub-card" aria-labelledby="create-title">
+                <div class="panel-head">
+                  <div>
+                    <span class="kicker">NEW ENTRY</span>
+                    <h3 id="create-title">添加感兴趣的商品</h3>
+                  </div>
+                </div>
+                <form id="create-product" class="fields">
+                  <label>商品名称<input name="name" maxlength="200" placeholder="例如：潮汐观测员 1/7 手办" required></label>
+                  <label>分类<select name="category">
+                    <option value="electronics">电子产品</option>
+                    <option value="game">游戏</option>
+                    <option value="figure">手办</option>
+                  </select></label>
+                  <div id="category-fields" class="fields wide spec-box" role="group" aria-label="分类信息"></div>
+                  <label>商品链接<input name="link" type="url" maxlength="2048" placeholder="https://..."></label>
+                  <label>目标价（CNY）<input name="targetPriceCents" inputmode="decimal" placeholder="0.00"></label>
+                  <label class="wide">标签（逗号分隔）<input name="tags" maxlength="1530" placeholder="限定版, 桌面美学"></label>
+                  <label class="wide">感兴趣的原因<textarea name="interestReason" rows="3" maxlength="2000" placeholder="记录打动你的设计细节或入手计划…"></textarea></label>
+                  <label class="wide">本地封面（可选，最大 5 MiB）<input name="cover" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
+                  <div class="wide"><button class="btn-full">添加商品</button></div>
+                </form>
+              </section>
+            </div>
+          </div>
         </fieldset>
       </section>
-      <section class="health" aria-labelledby="health-title">
-        <h2 id="health-title">服务状态</h2>
-        <p id="health-status" role="status" aria-atomic="true">正在检查 API…</p>
-        <button type="button" id="check-health">重新检查</button>
+
+      <section class="surface-card health" aria-labelledby="health-title">
+        <div class="health-left">
+          <span class="health-dot" id="health-dot" aria-hidden="true"></span>
+          <div>
+            <h2 id="health-title">服务状态</h2>
+            <p id="health-status" class="status-line" role="status" aria-atomic="true">正在检查 API…</p>
+          </div>
+        </div>
+        <button type="button" id="check-health" class="secondary btn-sm">重新检查</button>
         <noscript>请启用 JavaScript 以检查 API 状态。</noscript>
       </section>
     </main>

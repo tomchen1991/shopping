@@ -1,4 +1,4 @@
-import { renderRoom, renderSlotEditors } from './room.js';
+import { bindRoomToolbar, destroyRoom, renderRoom, renderSlotEditors, setRoomZone } from './room.js';
 
 const categories = {
   electronics: { label: '电子产品', fields: { brand: '品牌', model: '型号', configuration: '配置', specifications: '规格' } },
@@ -117,6 +117,9 @@ export function startManagement(apiUrl) {
   const editors = byId('room-editors');
   const shareLink = byId('room-share-link');
   const shareToggle = byId('room-share-toggle');
+  const copyShareBtn = byId('copy-share-link');
+  const catalogFilter = byId('catalog-filter');
+  let activeCategory = 'all';
   let coverUrl;
   let busy = false;
   let authMode = 'unknown';
@@ -127,6 +130,8 @@ export function startManagement(apiUrl) {
   let activityBlockedUntil = 0;
   let loginCooldownTimer = null;
   let sessionExpiredByActivity = false;
+
+  bindRoomToolbar(byId('room-management'), scene);
 
   async function api(path, { method = 'GET', json, file, image = false } = {}) {
     let response;
@@ -287,26 +292,46 @@ export function startManagement(apiUrl) {
       field(label, { name, ...(name === 'releaseDate' ? { type: 'date' } : { maxlength: '2000' }) })));
   }
 
+  function renderMetrics() {
+    const placed = room ? room.slots.filter(entry => entry.exhibit).length : 0;
+    byId('metric-products').textContent = String(products.length);
+    byId('metric-holdings').textContent = String(holdings.length);
+    byId('metric-placed').textContent = `${placed} / 6`;
+    byId('metric-share').textContent = room?.shareToken ? '公开分享中' : '仅自己可见';
+  }
+
   function renderOverview() {
+    const visibleProducts = activeCategory === 'all'
+      ? products
+      : products.filter(product => product.category === activeCategory);
     const list = el('ul', null, { class: 'product-list' });
-    for (const product of products) {
+    for (const product of visibleProducts) {
       const row = el('li');
       const open = el('button', product.name, { type: 'button', class: 'secondary' });
       open.addEventListener('click', () => void run(() => openProduct(product.id)));
-      row.append(open, el('span', categories[product.category].label));
+      row.append(open, el('span', categories[product.category].label, { class: 'category-badge' }));
       list.append(row);
     }
-    byId('product-list').replaceChildren(products.length ? list : el('p', '还没有商品。'));
+    byId('product-list').replaceChildren(
+      visibleProducts.length ? list : el('p', products.length ? '该分类下还没有商品。' : '还没有商品。'),
+    );
     byId('holdings-count').textContent = `共 ${holdings.length} 件持有物`;
     byId('holdings-list').replaceChildren(...holdings.map(item => {
-      const name = products.find(product => product.id === item.productId)?.name ?? '商品';
-      return el('li', `${name} · 收货日期 ${item.receivedDate}`);
+      const product = products.find(entry => entry.id === item.productId);
+      const row = el('li');
+      row.append(
+        el('span', `${product?.name ?? '商品'} · 收货日期 ${item.receivedDate}`),
+        ...(product ? [el('span', categories[product.category].label, { class: 'category-badge' })] : []),
+      );
+      return row;
     }));
+    renderMetrics();
   }
 
   function renderPrivateRoom() {
     const token = room?.shareToken;
     shareLink.hidden = !token;
+    copyShareBtn.hidden = !token;
     if (token) {
       shareLink.href = new URL(`/room/${token}`, window.location.origin);
       shareLink.textContent = shareLink.href;
@@ -318,8 +343,9 @@ export function startManagement(apiUrl) {
       ? '分享已开启。拥有链接的访客只能查看摆出的收藏。'
       : '房间不公开。开启分享后，仅摆出的收藏可通过链接查看。';
     shareToggle.textContent = token ? '关闭分享' : '开启分享';
+    renderMetrics();
     if (!room) {
-      scene.replaceChildren();
+      destroyRoom(scene);
       editors.replaceChildren();
       return;
     }
@@ -332,7 +358,31 @@ export function startManagement(apiUrl) {
       room = await api('/room');
       renderPrivateRoom();
       return '槽位已保存。';
-    }));
+    }), {
+      onZoneHover(zone) {
+        setRoomZone(scene, zone || 'all');
+      },
+    });
+  }
+
+  copyShareBtn.addEventListener('click', async () => {
+    if (!shareLink.href) return;
+    try {
+      await navigator.clipboard.writeText(shareLink.href);
+      status.textContent = '分享链接已复制到剪贴板。';
+      status.dataset.state = 'ok';
+    } catch {
+      status.textContent = '无法自动复制，请手动复制下方链接。';
+      status.dataset.state = 'error';
+    }
+  });
+
+  for (const btn of catalogFilter.querySelectorAll('[data-category]')) {
+    btn.addEventListener('click', () => {
+      activeCategory = btn.dataset.category;
+      for (const b of catalogFilter.querySelectorAll('[data-category]')) b.classList.toggle('active', b === btn);
+      renderOverview();
+    });
   }
 
   shareToggle.addEventListener('click', () => void run(async () => {
