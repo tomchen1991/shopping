@@ -2,6 +2,8 @@ import { test, expect } from '@playwright/test';
 
 test('anonymous browser cannot list private data or submit a purchase', async ({ page }) => {
   await page.goto('/');
+  await expect(page.locator('#manage-status')).toContainText('尚未验证身份');
+  await expect(page.locator('#management')).toBeHidden();
   const responses = await page.evaluate(async () => {
     const call = async (path, init) => {
       const r = await fetch('http://127.0.0.1:8791/api/manage/' + path, {credentials: 'include', ...init});
