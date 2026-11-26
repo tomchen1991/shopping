@@ -10,8 +10,8 @@ test('手办从本地封面和预订流转到展示柜，可分享且可撤销',
   await page.goto('/');
   const room = page.getByRole('region', { name: '我的收藏房间' });
   await expect(room.getByText(/房间不公开/)).toBeVisible();
-  const slot = room.getByRole('combobox', { name: '展示柜 1', exact: true });
-  await expect(slot.getByRole('option')).toHaveCount(1);
+  await room.getByRole('button', { name: '✎ 布置房间' }).click();
+  await expect(room.getByText(/还没有已收货的藏品/)).toBeVisible();
 
   const name = '潮汐观测员手办';
   const create = page.locator('#create-product');
@@ -31,24 +31,21 @@ test('手办从本地封面和预订流转到展示柜，可分享且可撤销',
   await purchase.getByRole('button', { name: '登记购买' }).click();
   const record = detail.getByRole('article').filter({ hasText: '不公开的商店' });
   await expect(record.getByText('待收货')).toBeVisible();
-  await expect(slot.getByRole('option')).toHaveCount(1);
+  await expect(room.getByRole('button', { name: `将 ${name} 放入房间` })).toHaveCount(0);
   await record.getByLabel('尾款（CNY）').fill('112.30');
   await record.getByRole('button', { name: '保存付款金额' }).click();
   await expect(record.getByText('CNY 162.50')).toBeVisible();
   await record.getByLabel('收货日期').fill('2026-11-22');
   await record.getByRole('button', { name: '确认收货' }).click();
   await expect(record.getByText('已收货')).toBeVisible();
-  await expect(slot.getByRole('option')).toHaveCount(2);
-  await expect(room.getByRole('combobox', { name: '桌面 1', exact: true }).getByRole('option')).toHaveCount(1);
-  await expect(room.getByRole('combobox', { name: '媒体架 1', exact: true }).getByRole('option')).toHaveCount(1);
-  await slot.selectOption({ label: `${name} · 2026-11-22` });
-  await slot.locator('xpath=ancestor::form').getByRole('button', { name: '保存槽位' }).click();
-  await expect(page.locator('#manage-status')).toHaveText('槽位已保存。');
-  const exhibit = room.getByRole('button', { name: `展示柜 1：${name}（查看商品详情）` });
+
+  await room.getByRole('button', { name: `将 ${name} 放入房间` }).click();
+  await expect(page.locator('#manage-status')).toHaveText('展品摆放已保存。');
+  await room.getByRole('button', { name: '✓ 完成布置' }).click();
+  const exhibit = room.getByRole('button', { name: new RegExp(`：${name}（查看商品详情）`) });
   await expect(exhibit).toBeVisible();
   await page.reload();
   await expect(exhibit).toBeVisible();
-  await expect(slot.locator('option:checked')).toHaveText(`${name} · 2026-11-22`);
   const privateCover = exhibit.getByRole('img', { name: `${name}封面` });
   await expect.poll(() => privateCover.evaluate(image => image.naturalWidth)).toBe(1);
   await exhibit.click();

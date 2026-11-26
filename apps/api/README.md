@@ -20,8 +20,9 @@
 | `POST /purchases/:purchaseId/receive` | `{ receivedDate }`（`YYYY-MM-DD`），确认收货，返回记录。 |
 | `POST /purchases/:purchaseId/cancel` | 无请求体，取消待收货购买，返回记录。 |
 | `GET /holdings` | 返回 `{ holdings }`；条目包含 `id`、`productId`、`purchaseId`、`receivedDate`。 |
-| `GET /room` | 返回 `{ shareToken, slots }`；私有时 `shareToken` 为 `null`。 |
-| `PUT /room/slots/:slot` | `{ holdingId }`，摆放或替换展品；传 `null` 清空。返回 `{ slot, holdingId }`。 |
+| `GET /room` | 返回 `{ shareToken, surfaces, placements }`；私有时 `shareToken` 为 `null`。 |
+| `PUT /room/placements/:holdingId` | `{ surface, x, z, rotationY?, scale? }`，摆放或移动已收货藏品到匹配的展示面局部坐标（`0..1`）。返回 `{ placement }`。 |
+| `DELETE /room/placements/:holdingId` | 从 3D 房间收起指定持有物。返回 `{ holdingId, removed: true }`。 |
 | `PUT /room/share` | `{ enabled }`（布尔值），返回 `{ shareToken }`。 |
 
 ## 商品与封面
@@ -40,10 +41,10 @@
 
 ## 等距房间与公开分享
 
-固定槽位为桌面 `desk-1`、`desk-2`（电子产品），媒体架 `shelf-1`、`shelf-2`（游戏），展示柜 `cabinet-1`、`cabinet-2`（手办）。只有本人已收货且分类匹配的持有物可以摆放；单件持有物只能占一个槽位。不满足这些条件时返回 `409 holding_not_placeable`。每个私有槽位返回 `{ slot, category, exhibit }`，其中空位的 `exhibit` 为 `null`，其他为 `{ holdingId, productId, name, hasCover }`。
+展示面分为办公桌台面 `desk-main`（电子产品），游戏展示柜 `game-upper`、`game-lower`（游戏），以及玻璃手办展示柜 `figure-upper`、`figure-lower`（手办）。只有本人已收货且分类匹配的持有物可以摆放到对应展示面，使用归一化平面坐标 `x, z ∈ [0, 1]`、水平朝向 `rotationY` 与缩放 `scale ∈ [0.6, 1.6]`；单件持有物同一时间只占一处摆放位置。不满足这些条件时返回 `409 holding_not_placeable`。私有 `placements` 项包含 `{ id, holdingId, productId, name, category, surface, x, z, rotationY, scale, hasCover, hasModel? }`。
 
-- `GET /api/public/rooms/:token` 无需登录，返回 `{ slots }`。槽位同样包含 `slot`、`category` 和 `exhibit`；公开展品仅含 `{ name, coverPath }`（当展品绑定了 3D 模型时额外包含 `modelPath`），没有封面时 `coverPath` 为 `null`。
-- `GET /api/public/rooms/:token/covers/:slot` 与 `GET /api/public/rooms/:token/models/:slot` 仅用于读取该房间对应槽位的当前封面或 3D 模型，不接受商品或 R2 对象 ID。房间未分享、链接已失效、槽位无展品或资源不存在均返回 `404`（空的已分享房间仍可访问）。房间、封面和模型均使用 `Cache-Control: no-store`。
+- `GET /api/public/rooms/:token` 无需登录，返回 `{ placements }`。公开展品仅含 `{ id, name, category, surface, x, z, rotationY, scale, coverPath }`（当展品绑定了 3D 模型时额外包含 `modelPath`），没有封面时 `coverPath` 为 `null`。
+- `GET /api/public/rooms/:token/covers/:placementId` 与 `GET /api/public/rooms/:token/models/:placementId` 仅用于读取该房间对应展示项的当前封面或 3D 模型，不接受商品或 R2 对象 ID。房间未分享、链接已失效、展品未摆出或资源不存在均返回 `404`（空的已分享房间仍可访问）。房间、封面和模型均使用 `Cache-Control: no-store`。
 - 分享令牌默认不存在。在已经分享时重复开启会保留当前链接；关闭会撤销令牌，重新开启生成新链接。关闭不删除房间布置，也不能收回已保存的副本。
 
 ## 生产域名与前端对接

@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 
+let useSimpleBoxes = false;
+
 function canvasTex(width, height, draw) {
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -11,8 +13,6 @@ function canvasTex(width, height, draw) {
   tex.anisotropy = 4;
   return tex;
 }
-
-let useSimpleBoxes = false;
 
 function rbox(w, h, d, radius, mat, pos = [0, 0, 0], rot = [0, 0, 0]) {
   const geo = useSimpleBoxes || radius <= 0 ? new THREE.BoxGeometry(w, h, d) : new RoundedBoxGeometry(w, h, d, 1, radius);
@@ -37,7 +37,7 @@ function tagDevice(root, info, focus = {}) {
   return root;
 }
 
-export function buildActiveGadgets(deskGroup, shelfGroup, { fast = false } = {}) {
+export function buildActiveGadgets(deskGroup, gameCabinetGroup, { fast = false } = {}) {
   useSimpleBoxes = Boolean(fast);
   const textures = [];
   const trackTex = tex => { textures.push(tex); return tex; };
@@ -51,7 +51,7 @@ export function buildActiveGadgets(deskGroup, shelfGroup, { fast = false } = {})
   const coralJoy = new THREE.MeshStandardMaterial({ color: 0xf43f5e, roughness: 0.32, metalness: 0.22 });
   const glassLens = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.08, metalness: 0.9 });
 
-  // 1. Apple MacBook Pro (M1 Pro) (2021-10) on ergonomic aluminum stand
+  // 1. Apple MacBook Pro (M1 Pro) (2021-10) tucked cleanly on desk back-left wing
   const macTex = trackTex(canvasTex(256, 160, (ctx, w, h) => {
     const g = ctx.createLinearGradient(0, 0, w, h);
     g.addColorStop(0, '#0f172a');
@@ -59,7 +59,7 @@ export function buildActiveGadgets(deskGroup, shelfGroup, { fast = false } = {})
     g.addColorStop(1, '#f97316');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.72)';
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.74)';
     ctx.fillRect(24, 24, 208, 112);
     ctx.fillStyle = 'rgba(255,255,255,0.18)';
     ctx.fillRect(36, 36, 84, 88);
@@ -72,17 +72,17 @@ export function buildActiveGadgets(deskGroup, shelfGroup, { fast = false } = {})
     ctx.fillRect(w / 2 - 14, 0, 28, 7);
   }));
   const macbook = new THREE.Group();
-  macbook.position.set(-0.22, 0.9, -0.34);
-  macbook.rotation.y = Math.PI / 2 - 0.14;
+  macbook.position.set(-0.24, 0.9, -1.24);
+  macbook.rotation.y = Math.PI / 2 - 0.16;
   macbook.add(
-    rbox(0.38, 0.036, 0.25, 0.008, warmSilver, [0, 0.018, 0]),
-    rbox(0.46, 0.016, 0.32, 0.005, spaceGray, [0, 0.055, 0]),
-    rbox(0.38, 0.005, 0.14, 0.002, matteBlack, [0, 0.065, -0.04]),
-    rbox(0.16, 0.004, 0.1, 0.002, darkMetal, [0, 0.064, 0.095]),
-    rbox(0.46, 0.3, 0.012, 0.004, spaceGray, [0, 0.205, -0.175], [-0.22, 0, 0]),
+    rbox(0.36, 0.034, 0.24, 0.008, warmSilver, [0, 0.017, 0]),
+    rbox(0.44, 0.016, 0.31, 0.005, spaceGray, [0, 0.052, 0]),
+    rbox(0.36, 0.005, 0.14, 0.002, matteBlack, [0, 0.062, -0.04]),
+    rbox(0.15, 0.004, 0.095, 0.002, darkMetal, [0, 0.061, 0.09]),
+    rbox(0.44, 0.29, 0.012, 0.004, spaceGray, [0, 0.2, -0.17], [-0.22, 0, 0]),
   );
-  const macScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.43, 0.27), new THREE.MeshBasicMaterial({ map: macTex }));
-  macScreen.position.set(0, 0.205, -0.168);
+  const macScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.41, 0.26), new THREE.MeshBasicMaterial({ map: macTex }));
+  macScreen.position.set(0, 0.2, -0.163);
   macScreen.rotation.x = -0.22;
   macbook.add(macScreen);
   tagDevice(macbook, {
@@ -90,10 +90,10 @@ export function buildActiveGadgets(deskGroup, shelfGroup, { fast = false } = {})
     period: '2021.10 — 至今',
     category: '笔记本',
     note: '贵的才是性价比最高的，M1 Pro芯片在2026年依然能打',
-  }, { offset: [0, 0.16, -0.06], forward: [0, 0.12, 1], distance: 0.78 });
+  }, { offset: [0, 0.16, -0.06], forward: [0, 0.12, 1], distance: 0.76 });
   deskGroup.add(macbook);
 
-  // 2. iPad Air 4 (2021-11) on magnetic folio stand + Apple Pencil
+  // 2. iPad Air 4 (2021-11) on magnetic folio stand
   const ipadTex = trackTex(canvasTex(256, 192, (ctx, w, h) => {
     const g = ctx.createLinearGradient(0, 0, w, h);
     g.addColorStop(0, '#0284c7');
@@ -108,15 +108,15 @@ export function buildActiveGadgets(deskGroup, shelfGroup, { fast = false } = {})
     ctx.stroke();
   }));
   const ipad = new THREE.Group();
-  ipad.position.set(0.12, 0.9, 0.38);
+  ipad.position.set(0.24, 0.9, 0.56);
   ipad.rotation.y = Math.PI / 2 - 0.28;
   ipad.add(
-    rbox(0.24, 0.015, 0.14, 0.005, darkMetal, [0, 0.01, -0.02]),
-    rbox(0.32, 0.24, 0.012, 0.004, spaceGray, [0, 0.13, 0], [-0.28, 0, 0]),
-    rbox(0.01, 0.01, 0.17, 0.004, pureWhite, [0, 0.256, -0.032], [0, Math.PI / 2, 0]),
+    rbox(0.23, 0.015, 0.13, 0.005, darkMetal, [0, 0.01, -0.02]),
+    rbox(0.31, 0.23, 0.012, 0.004, spaceGray, [0, 0.125, 0], [-0.28, 0, 0]),
+    rbox(0.01, 0.01, 0.16, 0.004, pureWhite, [0, 0.246, -0.03], [0, Math.PI / 2, 0]),
   );
-  const ipadScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.295, 0.215), new THREE.MeshBasicMaterial({ map: ipadTex }));
-  ipadScreen.position.set(0, 0.132, 0.008);
+  const ipadScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.285, 0.205), new THREE.MeshBasicMaterial({ map: ipadTex }));
+  ipadScreen.position.set(0, 0.127, 0.008);
   ipadScreen.rotation.x = -0.28;
   ipad.add(ipadScreen);
   tagDevice(ipad, {
@@ -127,7 +127,7 @@ export function buildActiveGadgets(deskGroup, shelfGroup, { fast = false } = {})
   }, { offset: [0, 0.12, 0], forward: [0, 0.14, 1], distance: 0.62 });
   deskGroup.add(ipad);
 
-  // 3. OPPO Find X8 (2025-04) upright on MagSafe-style desk dock
+  // 3. OPPO Find X8 (2025-04) upright on MagSafe-style dock
   const oppoTex = trackTex(canvasTex(128, 256, (ctx, w, h) => {
     const g = ctx.createLinearGradient(0, 0, 0, h);
     g.addColorStop(0, '#38bdf8');
@@ -140,21 +140,21 @@ export function buildActiveGadgets(deskGroup, shelfGroup, { fast = false } = {})
     ctx.fillText('18:00', 22, 68);
   }));
   const oppo = new THREE.Group();
-  oppo.position.set(0.34, 0.9, 0.66);
+  oppo.position.set(0.38, 0.9, 0.78);
   oppo.rotation.y = Math.PI / 2 - 0.42;
   oppo.add(
-    rbox(0.095, 0.018, 0.11, 0.006, darkMetal, [0, 0.01, 0]),
-    rbox(0.095, 0.195, 0.012, 0.005, warmSilver, [0, 0.115, 0], [-0.24, 0, 0]),
+    rbox(0.092, 0.018, 0.105, 0.006, darkMetal, [0, 0.01, 0]),
+    rbox(0.092, 0.19, 0.012, 0.005, warmSilver, [0, 0.112, 0], [-0.24, 0, 0]),
   );
-  const oppoScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.086, 0.184), new THREE.MeshBasicMaterial({ map: oppoTex }));
-  oppoScreen.position.set(0, 0.116, 0.007);
+  const oppoScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.083, 0.178), new THREE.MeshBasicMaterial({ map: oppoTex }));
+  oppoScreen.position.set(0, 0.113, 0.007);
   oppoScreen.rotation.x = -0.24;
-  const oppoCamRing = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.008, 24), warmSilver);
+  const oppoCamRing = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.008, 24), warmSilver);
   oppoCamRing.rotation.x = Math.PI / 2 - 0.24;
-  oppoCamRing.position.set(0, 0.15, -0.008);
-  const oppoCamGlass = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.009, 24), glassLens);
+  oppoCamRing.position.set(0, 0.146, -0.008);
+  const oppoCamGlass = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.009, 24), glassLens);
   oppoCamGlass.rotation.x = Math.PI / 2 - 0.24;
-  oppoCamGlass.position.set(0, 0.15, -0.009);
+  oppoCamGlass.position.set(0, 0.146, -0.009);
   oppo.add(oppoScreen, oppoCamRing, oppoCamGlass);
   tagDevice(oppo, {
     name: 'OPPO Find X8',
@@ -177,14 +177,14 @@ export function buildActiveGadgets(deskGroup, shelfGroup, { fast = false } = {})
     }
   }));
   const kindle = new THREE.Group();
-  kindle.position.set(0.28, 0.9, -0.58);
-  kindle.rotation.y = Math.PI / 2 + 0.22;
+  kindle.position.set(0.32, 0.9, -0.7);
+  kindle.rotation.y = Math.PI / 2 + 0.24;
   kindle.add(
-    rbox(0.15, 0.014, 0.11, 0.005, darkMetal, [0, 0.008, -0.01]),
-    rbox(0.165, 0.22, 0.012, 0.004, matteBlack, [0, 0.118, 0], [-0.32, 0, 0]),
+    rbox(0.145, 0.014, 0.105, 0.005, darkMetal, [0, 0.008, -0.01]),
+    rbox(0.16, 0.215, 0.012, 0.004, matteBlack, [0, 0.115, 0], [-0.32, 0, 0]),
   );
-  const kindleScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.135, 0.175), new THREE.MeshBasicMaterial({ map: kindleTex }));
-  kindleScreen.position.set(0, 0.122, 0.007);
+  const kindleScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.132, 0.172), new THREE.MeshBasicMaterial({ map: kindleTex }));
+  kindleScreen.position.set(0, 0.118, 0.007);
   kindleScreen.rotation.x = -0.32;
   kindle.add(kindleScreen);
   tagDevice(kindle, {
@@ -195,25 +195,26 @@ export function buildActiveGadgets(deskGroup, shelfGroup, { fast = false } = {})
   }, { offset: [0, 0.11, 0], forward: [0, 0.16, 1], distance: 0.56 });
   deskGroup.add(kindle);
 
-  // 5. Xbox Series S (2021-11) + sculpted wireless controller (media shelf bottom-left)
+  // Bottom Console Deck inside Game Display Cabinet (y = 0.20)
+  // 5. Xbox Series S + wireless controller
   const xbox = new THREE.Group();
-  xbox.position.set(-0.74, 0.19, 0.03);
+  xbox.position.set(-1.02, 0.2, 0.04);
   xbox.rotation.y = 0.08;
-  xbox.add(rbox(0.42, 0.11, 0.26, 0.014, pureWhite, [0, 0.055, 0]));
-  const xboxFan = new THREE.Mesh(new THREE.CylinderGeometry(0.088, 0.088, 0.008, 32), matteBlack);
-  xboxFan.position.set(-0.09, 0.112, 0);
+  xbox.add(rbox(0.38, 0.1, 0.24, 0.014, pureWhite, [0, 0.05, 0]));
+  const xboxFan = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.008, 28), matteBlack);
+  xboxFan.position.set(-0.08, 0.102, 0);
   const xboxLogo = new THREE.Mesh(
-    new THREE.SphereGeometry(0.012, 12, 12),
+    new THREE.SphereGeometry(0.011, 10, 10),
     new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 1.4 }),
   );
-  xboxLogo.position.set(0.15, 0.075, 0.128);
+  xboxLogo.position.set(0.13, 0.07, 0.118);
   const xboxPad = new THREE.Group();
-  xboxPad.position.set(0.32, 0.02, 0.07);
+  xboxPad.position.set(0.24, 0.016, 0.12);
   xboxPad.rotation.y = -0.25;
   xboxPad.add(
-    rbox(0.18, 0.044, 0.12, 0.016, pureWhite, [0, 0.022, 0]),
-    rbox(0.04, 0.022, 0.04, 0.006, matteBlack, [-0.045, 0.05, -0.01]),
-    rbox(0.04, 0.022, 0.04, 0.006, matteBlack, [0.04, 0.05, 0.01]),
+    rbox(0.16, 0.04, 0.11, 0.014, pureWhite, [0, 0.02, 0]),
+    rbox(0.036, 0.02, 0.036, 0.006, matteBlack, [-0.04, 0.044, -0.01]),
+    rbox(0.036, 0.02, 0.036, 0.006, matteBlack, [0.036, 0.044, 0.01]),
   );
   xbox.add(xboxFan, xboxLogo, xboxPad);
   tagDevice(xbox, {
@@ -221,10 +222,10 @@ export function buildActiveGadgets(deskGroup, shelfGroup, { fast = false } = {})
     period: '2021.11 — 至今',
     category: '游戏机',
     note: '最便宜的次世代机器，小巧纯白高颜值',
-  }, { offset: [0.06, 0.08, 0], forward: [0, 0.25, 1], distance: 0.9 });
-  shelfGroup.add(xbox);
+  }, { offset: [0.04, 0.07, 0], forward: [0, 0.24, 1], distance: 0.84 });
+  gameCabinetGroup.add(xbox);
 
-  // 6. Steam Deck (2024-02) on dock (media shelf bottom-right)
+  // 6. Steam Deck (2024-02) on dock
   const steamTex = trackTex(canvasTex(256, 160, (ctx, w, h) => {
     ctx.fillStyle = '#0f172a';
     ctx.fillRect(0, 0, w, h);
@@ -239,16 +240,16 @@ export function buildActiveGadgets(deskGroup, shelfGroup, { fast = false } = {})
     }
   }));
   const steamDeck = new THREE.Group();
-  steamDeck.position.set(0.74, 0.19, 0.05);
-  steamDeck.rotation.y = -0.14;
+  steamDeck.position.set(-0.28, 0.2, 0.05);
+  steamDeck.rotation.y = 0.03;
   steamDeck.add(
-    rbox(0.28, 0.03, 0.14, 0.008, darkMetal, [0, 0.015, 0]),
-    rbox(0.48, 0.19, 0.045, 0.018, matteBlack, [0, 0.12, 0.01], [-0.22, 0, 0]),
-    rbox(0.05, 0.05, 0.014, 0.004, darkMetal, [-0.15, 0.11, 0.036], [-0.22, 0, 0]),
-    rbox(0.05, 0.05, 0.014, 0.004, darkMetal, [0.15, 0.11, 0.036], [-0.22, 0, 0]),
+    rbox(0.26, 0.028, 0.13, 0.008, darkMetal, [0, 0.014, 0]),
+    rbox(0.45, 0.18, 0.042, 0.016, matteBlack, [0, 0.115, 0.01], [-0.22, 0, 0]),
+    rbox(0.046, 0.046, 0.014, 0.004, darkMetal, [-0.14, 0.105, 0.034], [-0.22, 0, 0]),
+    rbox(0.046, 0.046, 0.014, 0.004, darkMetal, [0.14, 0.105, 0.034], [-0.22, 0, 0]),
   );
-  const steamScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.145), new THREE.MeshBasicMaterial({ map: steamTex }));
-  steamScreen.position.set(0, 0.122, 0.034);
+  const steamScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.23, 0.14), new THREE.MeshBasicMaterial({ map: steamTex }));
+  steamScreen.position.set(0, 0.117, 0.032);
   steamScreen.rotation.x = -0.22;
   steamDeck.add(steamScreen);
   tagDevice(steamDeck, {
@@ -256,44 +257,44 @@ export function buildActiveGadgets(deskGroup, shelfGroup, { fast = false } = {})
     period: '2024.02 — 至今',
     category: '游戏机',
     note: 'Valve的硬件与第三方游戏优化反哺体验，爽的',
-  }, { offset: [0, 0.12, 0], forward: [0, 0.16, 1], distance: 0.72 });
-  shelfGroup.add(steamDeck);
+  }, { offset: [0, 0.12, 0], forward: [0, 0.16, 1], distance: 0.7 });
+  gameCabinetGroup.add(steamDeck);
 
-  // 7. Nintendo Switch 2 (2025-06) docked with sculpted Joy-Cons (media shelf top-left)
+  // 7. Nintendo Switch 2 (2025-06) docked with sculpted Joy-Cons
   const switch2 = new THREE.Group();
-  switch2.position.set(-0.62, 2.61, 0.02);
-  switch2.rotation.y = 0.08;
+  switch2.position.set(0.38, 0.2, 0.03);
+  switch2.rotation.y = -0.04;
   switch2.add(
-    rbox(0.36, 0.19, 0.08, 0.014, matteBlack, [0, 0.095, -0.02]),
-    rbox(0.32, 0.21, 0.024, 0.008, darkMetal, [0, 0.125, 0.005]),
-    rbox(0.055, 0.21, 0.032, 0.014, darkMetal, [-0.19, 0.125, 0.005]),
-    rbox(0.055, 0.21, 0.032, 0.014, darkMetal, [0.19, 0.125, 0.005]),
-    rbox(0.014, 0.18, 0.026, 0.005, cyanJoy, [-0.158, 0.125, 0.005]),
-    rbox(0.014, 0.18, 0.026, 0.005, coralJoy, [0.158, 0.125, 0.005]),
+    rbox(0.34, 0.18, 0.075, 0.014, matteBlack, [0, 0.09, -0.02]),
+    rbox(0.3, 0.2, 0.024, 0.008, darkMetal, [0, 0.12, 0.005]),
+    rbox(0.052, 0.2, 0.03, 0.014, darkMetal, [-0.178, 0.12, 0.005]),
+    rbox(0.052, 0.2, 0.03, 0.014, darkMetal, [0.178, 0.12, 0.005]),
+    rbox(0.014, 0.17, 0.025, 0.005, cyanJoy, [-0.148, 0.12, 0.005]),
+    rbox(0.014, 0.17, 0.025, 0.005, coralJoy, [0.148, 0.12, 0.005]),
   );
   tagDevice(switch2, {
     name: 'Nintendo Switch 2',
     period: '2025.06 — 至今',
     category: '游戏机',
     note: '首发购入，任天堂无需多说',
-  }, { offset: [0, 0.12, 0], forward: [0, 0.16, 1], distance: 0.76 });
-  shelfGroup.add(switch2);
+  }, { offset: [0, 0.12, 0], forward: [0, 0.16, 1], distance: 0.72 });
+  gameCabinetGroup.add(switch2);
 
-  // 8. Meta Quest 2 (2021-08) VR headset + dual Touch ring controllers (media shelf top-right)
+  // 8. Meta Quest 2 (2021-08) VR headset + dual Touch ring controllers
   const quest2 = new THREE.Group();
-  quest2.position.set(0.74, 2.61, 0.04);
+  quest2.position.set(1.02, 0.2, 0.05);
   quest2.rotation.y = -0.14;
   quest2.add(
-    rbox(0.28, 0.14, 0.14, 0.036, pureWhite, [0, 0.08, 0.01]),
-    rbox(0.24, 0.12, 0.08, 0.02, matteBlack, [0, 0.08, -0.06]),
-    rbox(0.26, 0.035, 0.22, 0.012, pureWhite, [0, 0.09, -0.11]),
+    rbox(0.26, 0.13, 0.13, 0.032, pureWhite, [0, 0.075, 0.01]),
+    rbox(0.22, 0.11, 0.075, 0.02, matteBlack, [0, 0.075, -0.055]),
+    rbox(0.24, 0.032, 0.2, 0.012, pureWhite, [0, 0.085, -0.1]),
   );
   for (const side of [-1, 1]) {
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.01, 12, 26), pureWhite);
-    ring.position.set(side * 0.24, 0.065, 0.04);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.009, 10, 22), pureWhite);
+    ring.position.set(side * 0.22, 0.06, 0.04);
     ring.rotation.x = Math.PI * 0.36;
     ring.castShadow = true;
-    const handle = rbox(0.032, 0.1, 0.032, 0.012, pureWhite, [side * 0.24, 0.03, 0.06], [0.25, 0, 0]);
+    const handle = rbox(0.03, 0.09, 0.03, 0.012, pureWhite, [side * 0.22, 0.028, 0.06], [0.25, 0, 0]);
     quest2.add(ring, handle);
   }
   tagDevice(quest2, {
@@ -301,8 +302,8 @@ export function buildActiveGadgets(deskGroup, shelfGroup, { fast = false } = {})
     period: '2021.08 — 至今',
     category: '游戏机 · VR',
     note: 'VR游戏，best游戏！',
-  }, { offset: [0, 0.08, 0], forward: [0, 0.18, 1], distance: 0.88 });
-  shelfGroup.add(quest2);
+  }, { offset: [0, 0.08, 0], forward: [0, 0.18, 1], distance: 0.84 });
+  gameCabinetGroup.add(quest2);
 
   return {
     dispose() {

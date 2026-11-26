@@ -92,14 +92,8 @@ test('Falsita Auth: 站内登录、验证码校验、429/503 处理、活动续�
         status: 200,
         json: {
           shareToken: null,
-          slots: [
-            { slot: 'desk-1', category: 'electronics', exhibit: null },
-            { slot: 'desk-2', category: 'electronics', exhibit: null },
-            { slot: 'shelf-1', category: 'game', exhibit: null },
-            { slot: 'shelf-2', category: 'game', exhibit: null },
-            { slot: 'cabinet-1', category: 'figure', exhibit: null },
-            { slot: 'cabinet-2', category: 'figure', exhibit: null },
-          ],
+          surfaces: [],
+          placements: [],
         },
       });
     }

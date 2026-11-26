@@ -1,4 +1,5 @@
-import { bindRoomToolbar, destroyRoom, renderRoom, renderSlotEditors, setRoomZone } from './room.js';
+import { bindRoomToolbar, destroyRoom, renderCuratorDock, renderRoom, setRoomCamera, setRoomCuratorMode } from './room.js';
+import { SURFACES } from './room-surfaces.js';
 
 const categories = {
   electronics: { label: '电子产品', fields: { brand: '品牌', model: '型号', configuration: '配置', specifications: '规格' } },
@@ -126,12 +127,14 @@ export function startManagement(apiUrl) {
   let holdings = [];
   let room;
   const scene = byId('private-room-scene');
-  const editors = byId('room-editors');
+  const curatorToggle = byId('curator-toggle');
+  const curatorDock = byId('room-curator-dock');
   const shareLink = byId('room-share-link');
   const shareToggle = byId('room-share-toggle');
   const copyShareBtn = byId('copy-share-link');
   const catalogFilter = byId('catalog-filter');
   let activeCategory = 'all';
+  let curatorMode = false;
   let coverUrl;
   let busy = false;
   let authMode = 'unknown';
@@ -305,10 +308,10 @@ export function startManagement(apiUrl) {
   }
 
   function renderMetrics() {
-    const placed = room ? room.slots.filter(entry => entry.exhibit).length : 0;
+    const placed = room ? room.placements.length : 0;
     byId('metric-products').textContent = String(products.length);
     byId('metric-holdings').textContent = String(holdings.length);
-    byId('metric-placed').textContent = `${placed} / 6`;
+    byId('metric-placed').textContent = `${placed} 件`;
     byId('metric-share').textContent = room?.shareToken ? '公开分享中' : '仅自己可见';
   }
 
@@ -340,6 +343,24 @@ export function startManagement(apiUrl) {
     renderMetrics();
   }
 
+  function savePlacement(holdingId, transform) {
+    return void run(async () => {
+      await api(`/room/placements/${holdingId}`, { method: 'PUT', json: transform });
+      room = await api('/room');
+      renderPrivateRoom();
+      return '展品摆放已保存。';
+    });
+  }
+
+  function removePlacement(holdingId) {
+    return void run(async () => {
+      await api(`/room/placements/${holdingId}`, { method: 'DELETE' });
+      room = await api('/room');
+      renderPrivateRoom();
+      return '已从房间收起展品。';
+    });
+  }
+
   function renderPrivateRoom() {
     const token = room?.shareToken;
     shareLink.hidden = !token;
@@ -357,26 +378,51 @@ export function startManagement(apiUrl) {
     shareToggle.textContent = token ? '关闭分享' : '开启分享';
     renderMetrics();
     if (!room) {
+      curatorMode = false;
+      curatorToggle.classList.remove('is-active');
+      curatorToggle.setAttribute('aria-pressed', 'false');
+      curatorToggle.textContent = '✎ 布置房间';
+      curatorDock.hidden = true;
+      curatorDock.replaceChildren();
       destroyRoom(scene);
-      editors.replaceChildren();
       return;
     }
-    renderRoom(scene, room.slots, {
-      coverUrl: exhibit => exhibit.hasCover ? resolveUrl(`/api/manage/products/${exhibit.productId}/cover`) : null,
-      modelUrl: exhibit => exhibit.hasModel ? resolveUrl(`/api/manage/products/${exhibit.productId}/model`) : null,
+    renderRoom(scene, room.placements, {
+      coverUrl: item => item.hasCover ? resolveUrl(`/api/manage/products/${item.productId}/cover`) : null,
+      modelUrl: item => item.hasModel ? resolveUrl(`/api/manage/products/${item.productId}/model`) : null,
       openProduct: id => void run(() => openProduct(id)),
+      onSavePlacement: savePlacement,
+      onRemovePlacement: removePlacement,
+      curatorMode,
     });
-    renderSlotEditors(editors, room.slots, products, holdings, (slot, holdingId) => void run(async () => {
-      await api(`/room/slots/${slot}`, { method: 'PUT', json: { holdingId } });
-      room = await api('/room');
-      renderPrivateRoom();
-      return '槽位已保存。';
-    }), {
-      onZoneHover(zone) {
-        setRoomZone(scene, zone || 'all');
-      },
-    });
+    setRoomCuratorMode(scene, curatorMode);
+    curatorDock.hidden = !curatorMode;
+    if (curatorMode) {
+      renderCuratorDock(curatorDock, {
+        sceneEl: scene,
+        placements: room.placements,
+        products,
+        holdings,
+        onPlace: savePlacement,
+        onRemove: removePlacement,
+        onSelect(placed) {
+          const zone = SURFACES[placed.surface]?.zone || 'overview';
+          setRoomCamera(scene, zone);
+          renderPrivateRoom();
+        },
+      });
+    } else {
+      curatorDock.replaceChildren();
+    }
   }
+
+  curatorToggle.addEventListener('click', () => {
+    curatorMode = !curatorMode;
+    curatorToggle.classList.toggle('is-active', curatorMode);
+    curatorToggle.setAttribute('aria-pressed', String(curatorMode));
+    curatorToggle.textContent = curatorMode ? '✓ 完成布置' : '✎ 布置房间';
+    renderPrivateRoom();
+  });
 
   copyShareBtn.addEventListener('click', async () => {
     if (!shareLink.href) return;
@@ -542,7 +588,7 @@ export function startManagement(apiUrl) {
       const idx = products.findIndex(item => item.id === updated.id);
       if (idx !== -1) products[idx] = updated;
       await renderCover(area, updated);
-      if (room.slots.some(slot => slot.exhibit?.productId === product.id)) {
+      if (room.placements.some(p => p.productId === product.id)) {
         room = await api('/room');
         renderPrivateRoom();
       }
@@ -571,7 +617,7 @@ export function startManagement(apiUrl) {
         const idx = products.findIndex(item => item.id === updated.id);
         if (idx !== -1) products[idx] = updated;
         renderModel(area, updated);
-        if (room.slots.some(slot => slot.exhibit?.productId === product.id)) {
+        if (room.placements.some(p => p.productId === product.id)) {
           room = await api('/room');
           renderPrivateRoom();
         }
@@ -584,7 +630,7 @@ export function startManagement(apiUrl) {
       const idx = products.findIndex(item => item.id === updated.id);
       if (idx !== -1) products[idx] = updated;
       renderModel(area, updated);
-      if (room.slots.some(slot => slot.exhibit?.productId === product.id)) {
+      if (room.placements.some(p => p.productId === product.id)) {
         room = await api('/room');
         renderPrivateRoom();
       }

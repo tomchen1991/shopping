@@ -52,10 +52,9 @@ test('上传 .glb 3D 模型后可在 3D 房间与公开分享中加载，撤销�
   await expect(card.getByText('已收货')).toBeVisible();
 
   const room = page.getByRole('region', { name: '我的收藏房间' });
-  const slot = room.getByRole('combobox', { name: '展示柜 2', exact: true });
-  await slot.selectOption({ label: `${name} · 2026-11-25` });
+  await room.getByRole('button', { name: '✎ 布置房间' }).click();
   const privateModelReq = page.waitForResponse(res => res.url().endsWith('/model') && res.status() === 200);
-  await slot.locator('xpath=ancestor::form').getByRole('button', { name: '保存槽位' }).click();
+  await room.getByRole('button', { name: `将 ${name} 放入房间` }).click();
   await privateModelReq;
 
   await room.getByRole('button', { name: '开启分享' }).click();
@@ -65,13 +64,15 @@ test('上传 .glb 3D 模型后可在 3D 房间与公开分享中加载，撤销�
   const visitor = await browser.newContext();
   try {
     const guest = await visitor.newPage();
-    const publicModelReq = guest.waitForResponse(`${apiOrigin}/api/public/rooms/${token}/models/cabinet-2`);
+    const publicModelReq = guest.waitForResponse(res => res.url().startsWith(`${apiOrigin}/api/public/rooms/${token}/models/`));
     await guest.goto(shareUrl);
-    expect((await publicModelReq).status()).toBe(200);
+    const modelRes = await publicModelReq;
+    expect(modelRes.status()).toBe(200);
+    const modelUrl = modelRes.url();
 
     await room.getByRole('button', { name: '关闭分享' }).click();
     await expect(page.locator('#manage-status')).toHaveText('分享已关闭，原链接已失效。');
-    expect((await visitor.request.get(`${apiOrigin}/api/public/rooms/${token}/models/cabinet-2`)).status()).toBe(404);
+    expect((await visitor.request.get(modelUrl)).status()).toBe(404);
   } finally {
     await visitor.close();
   }
