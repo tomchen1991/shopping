@@ -7,6 +7,10 @@ const furniture = [
   { name: '展示柜', zone: 'figure', category: '手办', slots: [['cabinet-1', 76, 32], ['cabinet-2', 76, 56]] },
 ];
 
+const slotZoneMap = Object.fromEntries(
+  furniture.flatMap(group => group.slots.map(([id]) => [id, group.zone])),
+);
+
 const stages = new WeakMap();
 
 function el(tag, text, attrs = {}) {
@@ -18,6 +22,8 @@ function el(tag, text, attrs = {}) {
 
 export function setRoomTheme(sceneEl, theme) {
   stages.get(sceneEl)?.stage?.setTheme(theme);
+  const shell = sceneEl.closest('.room-stage-shell');
+  if (shell) shell.dataset.theme = theme;
 }
 
 export function setRoomCamera(sceneEl, preset) {
@@ -43,14 +49,73 @@ export function renderRoom(sceneEl, slots, { coverUrl, modelUrl, openProduct } =
     sceneEl.replaceChildren();
     const overlay = el('div', null, { class: 'room-overlay' });
     const gadgetChip = el('div', null, { class: 'room-gadget-chip', hidden: '' });
-    const hint = el('div', '拖拽旋转 3D 视角 · 滚轮缩放 · 悬停现役设备看详情', { class: 'room-hud-hint' });
-    sceneEl.append(overlay, gadgetChip, hint);
-    record = { overlay, markers: new Map(), openProduct, stage: null };
+    const hint = el('div', '拖拽旋转视角 · 滚轮缩放 · 悬停设备或藏品看详情', { class: 'room-hud-hint' });
+
+    // Floating Stage Action Pills (Auto-orbit, Labels toggle, Reset view)
+    const hudControls = el('div', null, { class: 'room-hud-controls', role: 'group', 'aria-label': '3D 展厅快捷控制' });
+    const orbitBtn = el('button', '✦ 自动环绕', { type: 'button', class: 'hud-pill', 'aria-pressed': 'false' });
+    const labelsBtn = el('button', '隐藏空位', { type: 'button', class: 'hud-pill', 'aria-pressed': 'false' });
+    const resetBtn = el('button', '↺ 复位', { type: 'button', class: 'hud-pill' });
+    hudControls.append(orbitBtn, labelsBtn, resetBtn);
+
+    sceneEl.append(overlay, gadgetChip, hint, hudControls);
+    record = { overlay, markers: new Map(), openProduct, stage: null, orbitBtn, labelsBtn };
+
+    let hideEmpty = false;
+    labelsBtn.addEventListener('click', () => {
+      hideEmpty = !hideEmpty;
+      overlay.classList.toggle('hide-empty-markers', hideEmpty);
+      labelsBtn.classList.toggle('is-active', hideEmpty);
+      labelsBtn.setAttribute('aria-pressed', String(hideEmpty));
+      labelsBtn.textContent = hideEmpty ? '显示空位' : '隐藏空位';
+    });
+
+    orbitBtn.addEventListener('click', () => {
+      if (!record.stage) return;
+      record.stage.setAutoOrbit(!record.stage.isAutoOrbit());
+    });
+
+    resetBtn.addEventListener('click', () => {
+      const scope = sceneEl.closest('.showcase-card');
+      if (scope) {
+        for (const btn of scope.querySelectorAll('[data-camera]')) {
+          btn.classList.toggle('active', btn.dataset.camera === 'overview');
+        }
+      }
+      record.stage?.setAutoOrbit(false);
+      record.stage?.setCameraPreset('overview');
+    });
+
+    const syncOrbitBtn = active => {
+      orbitBtn.classList.toggle('is-active', active);
+      orbitBtn.setAttribute('aria-pressed', String(active));
+      orbitBtn.textContent = active ? '❚❚ 暂停环绕' : '✦ 自动环绕';
+    };
+
     try {
       record.stage = createRoomStage(sceneEl, {
+        onAutoOrbitChange: syncOrbitBtn,
         onSelectSlot(slotId) {
           const exhibit = record.slots?.find(entry => entry.slot === slotId)?.exhibit;
-          if (exhibit && record.openProduct) record.openProduct(exhibit.productId);
+          if (!exhibit) return;
+          if (record.openProduct) {
+            record.openProduct(exhibit.productId);
+            return;
+          }
+          // Public exhibition: smoothly focus the camera on the clicked exhibit & show caption
+          const zone = slotZoneMap[slotId] || 'overview';
+          const scope = sceneEl.closest('.showcase-card');
+          if (scope) {
+            for (const btn of scope.querySelectorAll('[data-camera]')) {
+              btn.classList.toggle('active', btn.dataset.camera === zone);
+            }
+          }
+          record.stage?.setCameraPreset(zone);
+          gadgetChip.replaceChildren(
+            el('strong', `馆藏展品 · ${exhibit.name}`),
+            el('span', '点击上方视角按钮可切换其他展区或返回全景'),
+          );
+          gadgetChip.hidden = false;
         },
         onHoverSlot(slotId) {
           for (const [id, marker] of record.markers.entries()) {
@@ -132,7 +197,20 @@ export function renderRoom(sceneEl, slots, { coverUrl, modelUrl, openProduct } =
       meta.append(el('span', exhibit?.name ?? '空位', { class: 'marker-name' }), el('small', label));
       marker.append(meta);
 
-      if (interactive) marker.addEventListener('click', () => openProduct(exhibit.productId));
+      if (interactive) {
+        marker.addEventListener('click', () => openProduct(exhibit.productId));
+      } else if (exhibit) {
+        marker.addEventListener('click', () => {
+          const scope = sceneEl.closest('.showcase-card');
+          if (scope) {
+            for (const btn of scope.querySelectorAll('[data-camera]')) {
+              btn.classList.toggle('active', btn.dataset.camera === group.zone);
+            }
+          }
+          record.stage?.setCameraPreset(group.zone);
+        });
+        marker.style.cursor = 'pointer';
+      }
       marker.addEventListener('mouseenter', () => record.stage?.setHoveredSlot(id));
       marker.addEventListener('mouseleave', () => record.stage?.setHoveredSlot(null));
 
