@@ -48,7 +48,8 @@ function call(path, { method = 'GET', auth = alice, json, body, headers = {} } =
 
 const put = (path, json, auth) => call(path, { method: 'PUT', json, auth });
 const visitor = (path, init) => mf.dispatchFetch(`https://api.example${path}`, init);
-const place = (slot, holdingId, auth) => put(`/room/slots/${slot}`, { holdingId }, auth);
+const place = (holdingId, body, auth) => put(`/room/placements/${holdingId}`, body, auth);
+const unplace = (holdingId, auth) => call(`/room/placements/${holdingId}`, { method: 'DELETE', auth });
 
 async function expect(response, status = 200) {
   const res = await response;
@@ -152,44 +153,58 @@ test('purchase accounting and receipt are atomic and isolated', async () => {
   assert.deepEqual(await db.prepare('SELECT typeof(total_cents) AS type, total_cents AS total FROM purchases WHERE id = ?').bind(preorder.id).first(), { type: 'integer', total: 3003 });
 });
 
-test('fixed room accepts only matching received holdings; guest projection follows current placement', async () => {
+test('surface room accepts only matching received holdings; guest projection follows current placement', async () => {
   const put = (path, json) => call(path, { method: 'PUT', json });
   assert.equal((await expect(call('/room'))).shareToken, null);
   const { shareToken } = await expect(put('/room/share', { enabled: true }));
   const publicURL = `https://api.example/api/public/rooms/${shareToken}`;
   const guest = () => mf.dispatchFetch(publicURL);
-  const coverURL = publicURL + '/covers/cabinet-2';
-  for (const [category, slot] of [['electronics', 'desk-2'], ['game', 'shelf-2'], ['figure', 'cabinet-2']]) {
-    const product = await newProduct({category, name: `示例-${category}`, interestReason: '私人笔记'});
-    const order = await expect(post(`/products/${product.id}/purchases`, {kind:'regular', shop:'私人店', amountCents:314}), 201);
-    const path = `/room/slots/${slot}`;
-    await expect(put(path, {holdingId:order.id}), 400);
-    await expect(post(`/purchases/${order.id}/receive`, {receivedDate:'2025-06-01'}));
+  const holdingIds = [];
+  let figurePlacementId;
+  for (const [category, surface] of [['electronics', 'desk-main'], ['game', 'game-upper'], ['figure', 'figure-lower']]) {
+    const product = await newProduct({ category, name: `示例-${category}`, interestReason: '私人笔记' });
+    const order = await expect(post(`/products/${product.id}/purchases`, { kind: 'regular', shop: '私人店', amountCents: 314 }), 201);
+    const invalidHoldingPath = `/room/placements/${'a'.repeat(32)}`;
+    await expect(put(invalidHoldingPath, { surface, x: 0.5, z: 0.5 }), 409);
+    await expect(post(`/purchases/${order.id}/receive`, { receivedDate: '2025-06-01' }));
     const holding = (await expect(call('/holdings'))).holdings.find(h => h.purchaseId === order.id);
-    await expect(put(path, {holdingId:holding.id}));
+    holdingIds.push(holding.id);
+    const { placement } = await expect(put(`/room/placements/${holding.id}`, { surface, x: 0.35, z: 0.65, rotationY: 0.4, scale: 1.1 }));
+    if (category === 'figure') figurePlacementId = placement.id;
     const room = await expect(guest());
-    assert.deepEqual(Object.keys(room), ['slots']);
-    assert.deepEqual(room.slots.find(s => s.slot === slot), {slot, category, exhibit:{name:product.name, coverPath:null}});
+    assert.deepEqual(Object.keys(room), ['placements']);
+    assert.deepEqual(room.placements.find(p => p.surface === surface), {
+      id: placement.id,
+      name: product.name,
+      category,
+      surface,
+      x: 0.35,
+      z: 0.65,
+      rotationY: 0.4,
+      scale: 1.1,
+      coverPath: null,
+    });
   }
-  const product = await newProduct({category:'figure',name:'未展示手办'});
+  const coverURL = `${publicURL}/covers/${figurePlacementId}`;
+  const product = await newProduct({ category: 'figure', name: '未展示手办' });
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+Xjb0AAAAASUVORK5CYII=', 'base64');
-  const { id } = await expect(call('/covers', {method:'POST', body:png, headers:{'Content-Type':'image/png'}}),201);
-  await expect(put(`/products/${product.id}/cover`, {coverId:id}));
-  const cancelled = await expect(post(`/products/${product.id}/purchases`, {kind:'regular', shop:'隐藏店', amountCents:4}),201);
+  const { id } = await expect(call('/covers', { method: 'POST', body: png, headers: { 'Content-Type': 'image/png' } }), 201);
+  await expect(put(`/products/${product.id}/cover`, { coverId: id }));
+  const cancelled = await expect(post(`/products/${product.id}/purchases`, { kind: 'regular', shop: '隐藏店', amountCents: 4 }), 201);
   await expect(post(`/purchases/${cancelled.id}/cancel`));
-  await expect(put('/room/slots/cabinet-2', {holdingId:cancelled.id}),400);
-  for (const key of [id, product.id, 'cabinet-1']) assert.equal((await mf.dispatchFetch(`${publicURL}/covers/${key}`)).status,404);
+  await expect(put(`/room/placements/${cancelled.id.replaceAll('-', '')}`, { surface: 'figure-upper', x: 0.5, z: 0.5 }), 409);
+  for (const key of [id, product.id, '0'.repeat(32)]) assert.equal((await mf.dispatchFetch(`${publicURL}/covers/${key}`)).status, 404);
   assert.ok(!JSON.stringify(await expect(guest())).includes(product.name));
   const displayed = (await expect(call('/products'))).products.find(p => p.name === '示例-figure');
-  await expect(put(`/products/${displayed.id}/cover`, {coverId:id}));
+  await expect(put(`/products/${displayed.id}/cover`, { coverId: id }));
   const image = await mf.dispatchFetch(coverURL);
-  assert.equal(image.status,200);
-  assert.equal(image.headers.get('Cache-Control'),'no-store');
-  assert.deepEqual(Buffer.from(await image.arrayBuffer()),png);
-  await expect(put('/room/share', {enabled:false}));
-  assert.equal((await guest()).status,404);
-  assert.equal((await mf.dispatchFetch(coverURL)).status,404);
-  for (const slot of ['desk-2','shelf-2','cabinet-2']) await expect(put(`/room/slots/${slot}`, {holdingId:null}));
+  assert.equal(image.status, 200);
+  assert.equal(image.headers.get('Cache-Control'), 'no-store');
+  assert.deepEqual(Buffer.from(await image.arrayBuffer()), png);
+  await expect(put('/room/share', { enabled: false }));
+  assert.equal((await guest()).status, 404);
+  assert.equal((await mf.dispatchFetch(coverURL)).status, 404);
+  for (const holdingId of holdingIds) await expect(unplace(holdingId));
 });
 
 test('local R2 stores raster bytes and only a verified owner can attach or read them', async () => {
@@ -235,7 +250,7 @@ async function receiveHolding(purchase, auth) {
   return holdings.find(item => item.purchaseId === purchase.id);
 }
 
-test('room placement requires an owned received holding, matching slot category and no duplicate', async () => {
+test('surface placement requires an owned received holding, matching surface category and valid bounds', async () => {
   const electronics = await newProduct({ name: '显示器', category: 'electronics' });
   const game = await newProduct({ name: '光盘', category: 'game' });
   const figure = await newProduct({ name: '手办', category: 'figure' });
@@ -244,38 +259,49 @@ test('room placement requires an owned received holding, matching slot category 
   await expect(post(`/purchases/${cancelled.id}/cancel`));
   assert.equal((await expect(call('/room'))).shareToken, null);
   await expect(call('/room', { auth: null }), 401);
-  await expect(place('cabinet-1', 'a'.repeat(32), null), 401);
+  await expect(place('a'.repeat(32), { surface: 'figure-upper', x: 0.5, z: 0.5 }, null), 401);
   await expect(put('/room/share', { enabled: true }, null), 401);
   await expect(put('/room/share', { enabled: 'true' }), 400);
   for (const purchase of [pending, cancelled]) {
-    await expect(place('cabinet-1', purchase.id), 400);
+    await expect(place(purchase.id, { surface: 'figure-upper', x: 0.5, z: 0.5 }), 400);
     // Even a legacy/imported holding pointing to a non-received order cannot be placed.
     const db = await mf.getD1Database('DB');
     const { id } = await db.prepare(`INSERT INTO holdings (owner_id, product_id, purchase_id, received_date)
       VALUES (?, ?, ?, ?) RETURNING id`).bind('alice', figure.id, purchase.id, '2026-11-21').first();
-    await expect(place('cabinet-1', id), 409);
+    await expect(place(id, { surface: 'figure-upper', x: 0.5, z: 0.5 }), 409);
     await db.prepare('DELETE FROM holdings WHERE id = ?').bind(id).run();
   }
   const display = await receiveHolding(await order(electronics));
   const disc = await receiveHolding(await order(game));
   const statue = await receiveHolding(await order(figure));
-  await expect(place('cabinet-1', display.id), 409);
-  await expect(place('somewhere', statue.id), 404);
-  await expect(place('cabinet-1', statue.id, bob), 409);
-  for (const [slot, item] of [['desk-1', display], ['shelf-2', disc], ['cabinet-1', statue]]) {
-    assert.deepEqual(await expect(place(slot, item.id)), { slot, holdingId: item.id });
+  await expect(place(display.id, { surface: 'figure-upper', x: 0.5, z: 0.5 }), 409);
+  await expect(place(statue.id, { surface: 'somewhere', x: 0.5, z: 0.5 }), 400);
+  await expect(place(statue.id, { surface: 'figure-upper', x: 1.5, z: 0.5 }), 400);
+  await expect(place(statue.id, { surface: 'figure-upper', x: 0.5, z: 0.5 }, bob), 409);
+  for (const [surface, item, coords] of [
+    ['desk-main', display, { x: 0.4, z: 0.2 }],
+    ['game-lower', disc, { x: 0.7, z: 0.5 }],
+    ['figure-upper', statue, { x: 0.5, z: 0.5 }],
+  ]) {
+    const { placement } = await expect(place(item.id, { surface, ...coords }));
+    assert.equal(placement.surface, surface);
+    assert.equal(placement.holdingId, item.id);
   }
-  await expect(place('cabinet-2', statue.id), 409);
+  // Moving the same holding to another matching surface updates its placement cleanly (never duplicates).
+  const moved = await expect(place(statue.id, { surface: 'figure-lower', x: 0.3, z: 0.4, rotationY: 0.5, scale: 1.2 }));
+  assert.equal(moved.placement.surface, 'figure-lower');
   const room = await expect(call('/room'));
-  assert.equal(room.slots.length, 6);
-  assert.deepEqual(room.slots.filter(slot => slot.exhibit).map(slot => [slot.slot, slot.category, slot.exhibit.productId]), [
-    ['desk-1', 'electronics', electronics.id], ['shelf-2', 'game', game.id], ['cabinet-1', 'figure', figure.id],
+  assert.equal(room.placements.length, 3);
+  assert.deepEqual(room.placements.map(p => [p.surface, p.category, p.productId]), [
+    ['desk-main', 'electronics', electronics.id],
+    ['figure-lower', 'figure', figure.id],
+    ['game-lower', 'game', game.id],
   ]);
-  assert.ok((await expect(call('/room', { auth: bob }))).slots.every(slot => slot.exhibit === null));
-  for (const slot of ['desk-1', 'shelf-2', 'cabinet-1']) await expect(place(slot, null));
+  assert.deepEqual((await expect(call('/room', { auth: bob }))).placements, []);
+  for (const item of [display, disc, statue]) await expect(unplace(item.id));
 });
 
-test('public share only exposes current slot metadata and covers; revocation and rotation invalidate old URLs', async () => {
+test('public share only exposes current placement metadata and covers; revocation and rotation invalidate old URLs', async () => {
   const figure = await newProduct({ name: '公开手办', category: 'figure', interestReason: '私有备注', targetPriceCents: 12345 });
   const privateFigure = await newProduct({ name: '未摆出的收藏', category: 'figure' });
   const holding = await receiveHolding(await order(figure));
@@ -287,41 +313,49 @@ test('public share only exposes current slot metadata and covers; revocation and
     coverIds.push(id);
     await expect(put(`/products/${product.id}/cover`, { coverId: id }));
   }
-  await expect(place('cabinet-1', holding.id));
+  const { placement } = await expect(place(holding.id, { surface: 'figure-upper', x: 0.5, z: 0.5 }));
   await expect(visitor(`/api/public/rooms/${'0'.repeat(32)}`), 404);
   const { shareToken } = await expect(put('/room/share', { enabled: true }));
   const publicPath = `/api/public/rooms/${shareToken}`;
-  const coverPath = `${publicPath}/covers/cabinet-1`;
+  const coverPath = `${publicPath}/covers/${placement.id}`;
   assert.equal((await expect(put('/room/share', { enabled: true }))).shareToken, shareToken);
   const publicResponse = await visitor(publicPath, { headers: { Origin: webOrigin } });
   assert.equal(publicResponse.status, 200);
   assert.equal(publicResponse.headers.get('Cache-Control'), 'no-store');
   assert.equal(publicResponse.headers.get('Access-Control-Allow-Origin'), webOrigin);
   assert.equal(publicResponse.headers.get('Access-Control-Allow-Credentials'), null);
-  assert.deepEqual(await publicResponse.json(), { slots: [
-    { slot: 'desk-1', category: 'electronics', exhibit: null }, { slot: 'desk-2', category: 'electronics', exhibit: null },
-    { slot: 'shelf-1', category: 'game', exhibit: null }, { slot: 'shelf-2', category: 'game', exhibit: null },
-    { slot: 'cabinet-1', category: 'figure', exhibit: { name: figure.name, coverPath } },
-    { slot: 'cabinet-2', category: 'figure', exhibit: null },
-  ] });
+  assert.deepEqual(await publicResponse.json(), {
+    placements: [{
+      id: placement.id,
+      name: figure.name,
+      category: 'figure',
+      surface: 'figure-upper',
+      x: 0.5,
+      z: 0.5,
+      rotationY: 0,
+      scale: 1,
+      coverPath,
+    }],
+  });
   const image = await visitor(coverPath);
   assert.equal(image.status, 200);
   assert.equal(image.headers.get('Cache-Control'), 'no-store');
   assert.equal(image.headers.get('Content-Type'), 'image/png');
   assert.deepEqual(Buffer.from(await image.arrayBuffer()), png);
-  for (const key of ['cabinet-2', privateFigure.id, coverIds[1]]) await expect(visitor(`${publicPath}/covers/${key}`), 404);
+  for (const key of ['0'.repeat(32), privateFigure.id, coverIds[1]]) await expect(visitor(`${publicPath}/covers/${key}`), 404);
   await expect(call(`/products/${privateFigure.id}/cover`, { auth: null }), 401);
-  await expect(place('cabinet-1', null));
+  await expect(unplace(holding.id));
   await expect(visitor(coverPath), 404);
   const empty = await expect(visitor(publicPath));
-  assert.ok(empty.slots.every(slot => slot.exhibit === null));
-  await expect(place('cabinet-1', holding.id));
+  assert.deepEqual(empty.placements, []);
+  await expect(place(holding.id, { surface: 'figure-upper', x: 0.5, z: 0.5 }));
   assert.deepEqual(await expect(put('/room/share', { enabled: false })), { shareToken: null });
   for (const path of [publicPath, coverPath]) await expect(visitor(path), 404);
   const reopened = await expect(put('/room/share', { enabled: true }));
   assert.notEqual(reopened.shareToken, shareToken);
   await expect(visitor(`/api/public/rooms/${reopened.shareToken}`));
   for (const path of [publicPath, coverPath]) await expect(visitor(path), 404);
+  await expect(unplace(holding.id));
 });
 
 function buildMinimalGlb() {
@@ -360,17 +394,25 @@ test('local R2 stores glb 3D models, enforces ownership, and exposes via active 
   await expect(call(modelPath, { auth: null }), 401);
 
   const holding = await receiveHolding(await order(figure));
-  await expect(place('cabinet-1', holding.id));
+  const { placement } = await expect(place(holding.id, { surface: 'figure-upper', x: 0.5, z: 0.5 }));
   const privateRoom = await expect(call('/room'));
-  assert.equal(privateRoom.slots.find(s => s.slot === 'cabinet-1').exhibit.hasModel, true);
+  assert.equal(privateRoom.placements.find(p => p.id === placement.id).hasModel, true);
 
   const { shareToken } = await expect(put('/room/share', { enabled: true }));
   const publicPath = `/api/public/rooms/${shareToken}`;
-  const publicModelPath = `${publicPath}/models/cabinet-1`;
+  const publicModelPath = `${publicPath}/models/${placement.id}`;
   const publicRoom = await expect(visitor(publicPath));
-  assert.deepEqual(publicRoom.slots.find(s => s.slot === 'cabinet-1'), {
-    slot: 'cabinet-1', category: 'figure',
-    exhibit: { name: figure.name, coverPath: null, modelPath: publicModelPath },
+  assert.deepEqual(publicRoom.placements.find(p => p.id === placement.id), {
+    id: placement.id,
+    name: figure.name,
+    category: 'figure',
+    surface: 'figure-upper',
+    x: 0.5,
+    z: 0.5,
+    rotationY: 0,
+    scale: 1,
+    coverPath: null,
+    modelPath: publicModelPath,
   });
   const guestModel = await visitor(publicModelPath);
   assert.equal(guestModel.status, 200);
@@ -382,5 +424,5 @@ test('local R2 stores glb 3D models, enforces ownership, and exposes via active 
 
   assert.equal((await expect(call(modelPath, { method: 'PUT', json: { modelId: null } }))).modelId, null);
   await expect(call(modelPath), 404);
-  await expect(place('cabinet-1', null));
+  await expect(unplace(holding.id));
 });

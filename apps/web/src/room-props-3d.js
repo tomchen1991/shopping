@@ -73,9 +73,9 @@ export function buildStudioSpeakers(deskGroup, mats) {
   const copperRingMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.28, metalness: 0.85 });
   const greenLed = new THREE.MeshStandardMaterial({ color: 0x34d399, emissive: 0x10b981, emissiveIntensity: 1.6 });
 
-  for (const [sz, yaw] of [[-0.45, 0.16], [0.89, -0.16]]) {
+  for (const [sz, yaw] of [[-0.78, 0.16], [0.68, -0.16]]) {
     const spk = new THREE.Group();
-    spk.position.set(-0.38, 0.9, sz);
+    spk.position.set(-0.42, 0.9, sz);
     spk.rotation.y = Math.PI / 2 + yaw;
 
     // Isolation pad
@@ -100,7 +100,7 @@ export function buildStudioSpeakers(deskGroup, mats) {
 export function buildDeskAccessories(deskGroup, mats) {
   // Custom mechanical keyboard with keycap rows & coiled cable
   const kbGroup = new THREE.Group();
-  kbGroup.position.set(0.18, 0.913, 0.05);
+  kbGroup.position.set(0.14, 0.913, -0.05);
   const keycapLight = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.45, metalness: 0.05 });
   const keycapDark = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.45, metalness: 0.08 });
   const keycapAccent = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.35, metalness: 0.15 });
@@ -125,15 +125,15 @@ export function buildDeskAccessories(deskGroup, mats) {
   deskGroup.add(kbGroup);
 
   // Sculpted wireless mouse
-  deskGroup.add(rbox(0.11, 0.032, 0.068, 0.015, mats.matteMetal, [0.18, 0.922, -0.32]));
-  deskGroup.add(rbox(0.022, 0.01, 0.008, 0.003, mats.brass, [0.145, 0.935, -0.32]));
+  deskGroup.add(rbox(0.11, 0.032, 0.068, 0.015, mats.matteMetal, [0.14, 0.922, -0.42]));
+  deskGroup.add(rbox(0.022, 0.01, 0.008, 0.003, mats.brass, [0.105, 0.935, -0.42]));
 
   // Ceramic coffee mug on cork coaster
   const corkMat = new THREE.MeshStandardMaterial({ color: 0x926239, roughness: 0.9 });
   const ceramicMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.22, metalness: 0.06 });
   const coffeeMat = new THREE.MeshStandardMaterial({ color: 0x3b2112, roughness: 0.15, metalness: 0.08 });
   const mug = new THREE.Group();
-  mug.position.set(0.36, 0.902, -0.78);
+  mug.position.set(0.35, 0.902, -0.82);
   mug.add(cyl(0.062, 0.062, 0.008, 22, corkMat, [0, 0.004, 0]));
   mug.add(cyl(0.046, 0.042, 0.1, 24, ceramicMat, [0, 0.058, 0]));
   mug.add(cyl(0.038, 0.038, 0.006, 20, coffeeMat, [0, 0.105, 0]));
@@ -143,11 +143,11 @@ export function buildDeskAccessories(deskGroup, mats) {
   mug.add(handle);
   deskGroup.add(mug);
 
-  // Minimal desk succulent pot near lamp
+  // Minimal desk succulent pot near front-left wing
   const terracotta = new THREE.MeshStandardMaterial({ color: 0xc26d4a, roughness: 0.78 });
   const leafMat = new THREE.MeshStandardMaterial({ color: 0x2e7d5b, roughness: 0.55 });
   const miniPlant = new THREE.Group();
-  miniPlant.position.set(-0.32, 0.9, -1.12);
+  miniPlant.position.set(-0.3, 0.9, 1.48);
   miniPlant.add(cyl(0.055, 0.042, 0.08, 18, terracotta, [0, 0.04, 0]));
   for (let i = 0; i < 6; i++) {
     const a = (i / 6) * Math.PI * 2;
@@ -336,9 +336,9 @@ export function buildWindowAndExterior(roomGroup, mats) {
 export function buildRoomDecor(roomGroup, shelfGroup, mats) {
   const textures = [];
 
-  // 1. Tall corner potted Monstera plant tucked beside the display cabinet
+  // 1. Tall corner potted Monstera plant tucked beside the panoramic figure cabinet
   const planterGroup = new THREE.Group();
-  planterGroup.position.set(2.96, 0, 0.52);
+  planterGroup.position.set(3.28, 0, 0.85);
   const stonewarePot = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.65, metalness: 0.08 });
   const soilMat = new THREE.MeshStandardMaterial({ color: 0x271c15, roughness: 0.95 });
   const leafMat = new THREE.MeshStandardMaterial({ color: 0x1f6e4c, roughness: 0.5, side: THREE.DoubleSide });
@@ -414,20 +414,12 @@ export function buildRoomDecor(roomGroup, shelfGroup, mats) {
   roomGroup.add(rbox(0.24, 0.04, 0.18, 0.006, new THREE.MeshStandardMaterial({ color: 0xf43f5e, roughness: 0.6 }), [2.42, 3.22, -3.05]));
   roomGroup.add(rbox(0.22, 0.036, 0.17, 0.006, new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.6 }), [2.42, 3.258, -3.05]));
 
-  // 4. Media shelf collector books & physical game cases (non-slot bays)
-  const bookColors = [0xef4444, 0x3b82f6, 0x10b981, 0xf59e0b, 0x8b5cf6, 0xe2e8f0, 0x06b6d4];
-  // Bottom-left beside Xbox (shelf bay x=-1.45..0, y=0.91) -> place books on middle-right bay (x=0.72, y=1.75)
-  for (let i = 0; i < 6; i++) {
-    const h = 0.28 + ((i * 7) % 5) * 0.025;
-    const mat = new THREE.MeshStandardMaterial({ color: bookColors[i % bookColors.length], roughness: 0.55 });
-    shelfGroup.add(rbox(0.042, h, 0.24, 0.006, mat, [0.36 + i * 0.048, 1.75 + h / 2, -0.04]));
-  }
-  // Leaning collector artbook on middle-right bay
-  shelfGroup.add(rbox(0.24, 0.31, 0.032, 0.006, new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.35, metalness: 0.2 }), [1.02, 1.9, -0.06], [-0.14, -0.22, 0]));
-  // Stacked Switch/PS5 cases in top-left beside Switch 2
+  // 4. Collector artbooks tucked neatly on far-left corner of upper game cabinet shelf
+  const bookColors = [0xef4444, 0x3b82f6, 0x10b981, 0xf59e0b, 0x8b5cf6];
   for (let i = 0; i < 4; i++) {
-    const mat = new THREE.MeshStandardMaterial({ color: i % 2 === 0 ? 0xe11d48 : 0x2563eb, roughness: 0.4 });
-    shelfGroup.add(rbox(0.026, 0.22, 0.16, 0.004, mat, [-1.22 + i * 0.032, 2.72, -0.04]));
+    const h = 0.28 + ((i * 5) % 4) * 0.024;
+    const mat = new THREE.MeshStandardMaterial({ color: bookColors[i % bookColors.length], roughness: 0.55 });
+    shelfGroup.add(rbox(0.038, h, 0.22, 0.006, mat, [-1.2 + i * 0.044, 1.94 + h / 2, -0.05]));
   }
 
   return {

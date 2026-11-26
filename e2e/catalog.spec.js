@@ -89,10 +89,10 @@ test('received preorder moves from private catalog to a revocable public figure 
   await card.getByLabel('收货日期').fill('2025-06-02');
   await card.getByRole('button',{name:'确认收货'}).click();
   await expect(page.locator('#holdings-list')).toContainText(name);
-  const slot = page.getByRole('combobox', {name:'展示柜 1', exact:true});
-  await slot.selectOption({label:`${name} · 2025-06-02`});
-  await page.locator('form').filter({has:slot}).getByRole('button',{name:'保存槽位'}).click();
-  const exhibit = page.getByRole('button',{name:new RegExp(`展示柜 1：${name}`)});
+  await page.getByRole('button', { name: '✎ 布置房间' }).click();
+  await page.getByRole('button', { name: `将 ${name} 放入房间` }).click();
+  await page.getByRole('button', { name: '✓ 完成布置' }).click();
+  const exhibit = page.getByRole('button', { name: new RegExp(`：${name}（查看商品详情）`) });
   await expect(exhibit).toBeVisible();
   await page.reload();
   await exhibit.click();

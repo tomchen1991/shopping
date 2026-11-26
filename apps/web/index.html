@@ -93,8 +93,8 @@
               <span class="metric-hint">确认收货自动入库</span>
             </div>
             <div class="metric-tile">
-              <span class="metric-label">3D 房间展位</span>
-              <strong id="metric-placed" class="metric-value">0 / 6</strong>
+              <span class="metric-label">3D 房间展品</span>
+              <strong id="metric-placed" class="metric-value">0 件</strong>
               <span class="metric-hint">办公桌 · 游戏柜 · 手办柜</span>
             </div>
             <div class="metric-tile">
@@ -109,7 +109,7 @@
               <div>
                 <span class="kicker">3D COLLECTOR ROOM · 三维微缩展示室</span>
                 <h3 id="room-title">我的收藏房间</h3>
-                <p class="section-desc">电子产品在办公桌摆放，游戏陈列于游戏展示柜，手办供奉在带灯玻璃展示柜。点击任意屏幕或展品可单独放大特写，支持导入 .glb 模型。</p>
+                <p class="section-desc">电子产品摆在办公桌，游戏陈列于游戏展示柜，手办供奉在全景玻璃柜。点击「布置房间」可将已收货藏品直接拖入展示面。</p>
               </div>
               <div class="room-toolbar">
                 <div class="segmented-control" role="group" aria-label="3D 视角预设">
@@ -123,6 +123,7 @@
                   <button type="button" class="seg-btn" data-lighting="night">☾ 深夜霓虹</button>
                   <button type="button" class="seg-btn" data-lighting="gallery">✦ 展馆聚光</button>
                 </div>
+                <button type="button" id="curator-toggle" class="curator-toggle-btn" aria-pressed="false">✎ 布置房间</button>
               </div>
             </div>
 
@@ -131,6 +132,7 @@
                 <div class="room-stage-shell">
                   <div id="private-room-scene" class="room-scene" role="group" aria-label="我的等距房间"></div>
                 </div>
+                <div id="room-curator-dock" class="curator-dock" aria-label="房间布置藏品栏" hidden></div>
                 <div class="room-share">
                   <div class="room-share-top">
                     <p id="room-share-state"></p>
@@ -141,10 +143,6 @@
                   </div>
                   <p><a id="room-share-link" hidden></a></p>
                 </div>
-              </div>
-
-              <div class="room-console">
-                <div id="room-editors" class="room-editors"></div>
               </div>
             </div>
           </section>
