@@ -19,7 +19,7 @@ function buildMinimalGlb() {
 
 test('上传 .glb 3D 模型后可在 3D 房间与公开分享中加载，撤销后失效', async ({ page, context, browser }) => {
   await context.addCookies([{
-    name: 'order_room_test', value: 'test-room-owner', domain: '127.0.0.1', path: '/api/manage', httpOnly: true, sameSite: 'Lax',
+    name: 'order_room_test', value: 'test-model-owner', domain: '127.0.0.1', path: '/api/manage', httpOnly: true, sameSite: 'Lax',
   }]);
   await page.goto('/');
 

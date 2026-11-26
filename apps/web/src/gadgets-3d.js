@@ -12,8 +12,11 @@ function canvasTex(width, height, draw) {
   return tex;
 }
 
+let useSimpleBoxes = false;
+
 function rbox(w, h, d, radius, mat, pos = [0, 0, 0], rot = [0, 0, 0]) {
-  const m = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 1, radius), mat);
+  const geo = useSimpleBoxes || radius <= 0 ? new THREE.BoxGeometry(w, h, d) : new RoundedBoxGeometry(w, h, d, 1, radius);
+  const m = new THREE.Mesh(geo, mat);
   m.position.set(...pos);
   m.rotation.set(...rot);
   m.castShadow = true;
@@ -21,14 +24,21 @@ function rbox(w, h, d, radius, mat, pos = [0, 0, 0], rot = [0, 0, 0]) {
   return m;
 }
 
-function tagDevice(root, info) {
+function tagDevice(root, info, focus = {}) {
+  root.userData.gadgetRoot = root;
+  root.userData.gadgetInfo = info;
+  root.userData.gadgetFocus = focus;
   root.traverse(node => {
-    if (node.isMesh) node.userData.gadget = info;
+    if (node.isMesh) {
+      node.userData.gadget = info;
+      node.userData.gadgetRoot = root;
+    }
   });
   return root;
 }
 
-export function buildActiveGadgets(deskGroup, shelfGroup) {
+export function buildActiveGadgets(deskGroup, shelfGroup, { fast = false } = {}) {
+  useSimpleBoxes = Boolean(fast);
   const textures = [];
   const trackTex = tex => { textures.push(tex); return tex; };
 
@@ -80,7 +90,7 @@ export function buildActiveGadgets(deskGroup, shelfGroup) {
     period: '2021.10 — 至今',
     category: '笔记本',
     note: '贵的才是性价比最高的，M1 Pro芯片在2026年依然能打',
-  });
+  }, { offset: [0, 0.16, -0.06], forward: [0, 0.12, 1], distance: 0.78 });
   deskGroup.add(macbook);
 
   // 2. iPad Air 4 (2021-11) on magnetic folio stand + Apple Pencil
@@ -114,7 +124,7 @@ export function buildActiveGadgets(deskGroup, shelfGroup) {
     period: '2021.11 — 至今',
     category: '平板',
     note: '不管是看片还是漫画、娱乐起来太强了',
-  });
+  }, { offset: [0, 0.12, 0], forward: [0, 0.14, 1], distance: 0.62 });
   deskGroup.add(ipad);
 
   // 3. OPPO Find X8 (2025-04) upright on MagSafe-style desk dock
@@ -151,7 +161,7 @@ export function buildActiveGadgets(deskGroup, shelfGroup) {
     period: '2025.04 — 至今',
     category: '手机',
     note: 'OPhone名不虚传，皮实好用就是爽',
-  });
+  }, { offset: [0, 0.11, 0], forward: [0, 0.14, 1], distance: 0.52 });
   deskGroup.add(oppo);
 
   // 4. Kindle Voyage (2019-01) on reading stand
@@ -182,12 +192,12 @@ export function buildActiveGadgets(deskGroup, shelfGroup) {
     period: '2019.01 — 至今',
     category: '平板 / 阅读器',
     note: '陪伴多年依然清晰的经典墨水屏阅读器',
-  });
+  }, { offset: [0, 0.11, 0], forward: [0, 0.16, 1], distance: 0.56 });
   deskGroup.add(kindle);
 
   // 5. Xbox Series S (2021-11) + sculpted wireless controller (media shelf bottom-left)
   const xbox = new THREE.Group();
-  xbox.position.set(-0.74, 0.11, 0.03);
+  xbox.position.set(-0.74, 0.19, 0.03);
   xbox.rotation.y = 0.08;
   xbox.add(rbox(0.42, 0.11, 0.26, 0.014, pureWhite, [0, 0.055, 0]));
   const xboxFan = new THREE.Mesh(new THREE.CylinderGeometry(0.088, 0.088, 0.008, 32), matteBlack);
@@ -211,7 +221,7 @@ export function buildActiveGadgets(deskGroup, shelfGroup) {
     period: '2021.11 — 至今',
     category: '游戏机',
     note: '最便宜的次世代机器，小巧纯白高颜值',
-  });
+  }, { offset: [0.06, 0.08, 0], forward: [0, 0.25, 1], distance: 0.9 });
   shelfGroup.add(xbox);
 
   // 6. Steam Deck (2024-02) on dock (media shelf bottom-right)
@@ -229,7 +239,7 @@ export function buildActiveGadgets(deskGroup, shelfGroup) {
     }
   }));
   const steamDeck = new THREE.Group();
-  steamDeck.position.set(0.74, 0.11, 0.05);
+  steamDeck.position.set(0.74, 0.19, 0.05);
   steamDeck.rotation.y = -0.14;
   steamDeck.add(
     rbox(0.28, 0.03, 0.14, 0.008, darkMetal, [0, 0.015, 0]),
@@ -246,7 +256,7 @@ export function buildActiveGadgets(deskGroup, shelfGroup) {
     period: '2024.02 — 至今',
     category: '游戏机',
     note: 'Valve的硬件与第三方游戏优化反哺体验，爽的',
-  });
+  }, { offset: [0, 0.12, 0], forward: [0, 0.16, 1], distance: 0.72 });
   shelfGroup.add(steamDeck);
 
   // 7. Nintendo Switch 2 (2025-06) docked with sculpted Joy-Cons (media shelf top-left)
@@ -266,7 +276,7 @@ export function buildActiveGadgets(deskGroup, shelfGroup) {
     period: '2025.06 — 至今',
     category: '游戏机',
     note: '首发购入，任天堂无需多说',
-  });
+  }, { offset: [0, 0.12, 0], forward: [0, 0.16, 1], distance: 0.76 });
   shelfGroup.add(switch2);
 
   // 8. Meta Quest 2 (2021-08) VR headset + dual Touch ring controllers (media shelf top-right)
@@ -291,7 +301,7 @@ export function buildActiveGadgets(deskGroup, shelfGroup) {
     period: '2021.08 — 至今',
     category: '游戏机 · VR',
     note: 'VR游戏，best游戏！',
-  });
+  }, { offset: [0, 0.08, 0], forward: [0, 0.18, 1], distance: 0.88 });
   shelfGroup.add(quest2);
 
   return {

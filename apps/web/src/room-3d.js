@@ -8,12 +8,12 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { buildActiveGadgets } from './gadgets-3d.js';
-import { buildDeskAccessories, buildRoomDecor, buildStudioChair, buildStudioSpeakers, buildWindowAndExterior } from './room-props-3d.js';
+import { buildDeskAccessories, buildRoomDecor, buildStudioChair, buildStudioSpeakers, buildWindowAndExterior, setPropsFastMode } from './room-props-3d.js';
 
 const PRESETS = {
   overview: { position: [5.85, 4.65, 6.6], target: [0.05, 1.32, -0.5] },
   electronics: { position: [1.55, 2.32, 3.28], target: [-1.88, 1.18, 1.05] },
-  game: { position: [-0.65, 2.02, 2.48], target: [-0.65, 1.48, -2.55] },
+  game: { position: [-0.65, 1.98, 2.68], target: [-0.65, 1.5, -2.55] },
   figure: { position: [0.38, 2.04, 2.26], target: [2.22, 1.64, -1.65] },
 };
 
@@ -207,8 +207,10 @@ function createParticleTexture() {
   });
 }
 
+let useSimpleShellBoxes = false;
+
 function box(w, h, d, material, pos = [0, 0, 0], { cast = true, receive = true, radius = 0 } = {}) {
-  const geo = radius > 0 ? new RoundedBoxGeometry(w, h, d, 1, radius) : new THREE.BoxGeometry(w, h, d);
+  const geo = !useSimpleShellBoxes && radius > 0 ? new RoundedBoxGeometry(w, h, d, 1, radius) : new THREE.BoxGeometry(w, h, d);
   const mesh = new THREE.Mesh(geo, material);
   mesh.position.set(...pos);
   mesh.castShadow = cast;
@@ -216,12 +218,14 @@ function box(w, h, d, material, pos = [0, 0, 0], { cast = true, receive = true, 
   return mesh;
 }
 
-export function createRoomStage(container, { onSelectSlot, onHoverSlot, onHoverGadget, onProject, onAutoOrbitChange } = {}) {
+export function createRoomStage(container, { onSelectSlot, onSelectGadget, onHoverSlot, onHoverGadget, onProject, onAutoOrbitChange } = {}) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   const gl = renderer.getContext();
   const debugInfo = gl?.getExtension?.('WEBGL_debug_renderer_info');
   const gpuName = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : gl?.getParameter?.(gl.RENDERER) || '';
   const isSoftwareGpu = /swiftshader|llvmpipe|software/i.test(String(gpuName));
+  useSimpleShellBoxes = isSoftwareGpu;
+  setPropsFastMode(isSoftwareGpu);
 
   const pixelRatio = Math.min(window.devicePixelRatio || 1, isSoftwareGpu ? 1 : 1.5);
   renderer.setPixelRatio(pixelRatio);
@@ -259,8 +263,8 @@ export function createRoomStage(container, { onSelectSlot, onHoverSlot, onHoverG
   controls.enableDamping = true;
   controls.dampingFactor = 0.07;
   controls.target.set(...PRESETS.overview.target);
-  controls.minDistance = 2.4;
-  controls.maxDistance = 12.2;
+  controls.minDistance = 0.52;
+  controls.maxDistance = 12.5;
   controls.minPolarAngle = 0.25;
   controls.maxPolarAngle = Math.PI * 0.47;
   controls.autoRotate = false;
@@ -405,17 +409,34 @@ export function createRoomStage(container, { onSelectSlot, onHoverSlot, onHoverG
   deskGroup.add(box(0.04, 0.03, 3.22, accentLedMat, [-0.64, 0.81, 0], { cast: false }));
   // Wool felt desk mat
   deskGroup.add(box(0.58, 0.014, 1.28, new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.92 }), [0.16, 0.905, 0], { radius: 0.005 }));
-  // Studio Monitor on aluminum arm stand
-  deskGroup.add(box(0.18, 0.025, 0.28, chromeMat, [-0.45, 0.912, 0.22], { radius: 0.006 }));
-  deskGroup.add(box(0.055, 0.48, 0.075, matteMetalMat, [-0.49, 1.14, 0.22], { radius: 0.01 }));
-  deskGroup.add(box(0.055, 0.56, 1.14, matteMetalMat, [-0.39, 1.46, 0.22], { radius: 0.012 }));
+  // Studio Monitor on aluminum arm stand (clickable & zoomable screen)
+  const monitorGroup = new THREE.Group();
+  monitorGroup.add(box(0.18, 0.025, 0.28, chromeMat, [-0.45, 0.912, 0.22], { radius: 0.006 }));
+  monitorGroup.add(box(0.055, 0.48, 0.075, matteMetalMat, [-0.49, 1.14, 0.22], { radius: 0.01 }));
+  monitorGroup.add(box(0.055, 0.56, 1.14, matteMetalMat, [-0.39, 1.46, 0.22], { radius: 0.012 }));
   const screenMesh = new THREE.Mesh(
     new THREE.PlaneGeometry(1.06, 0.49),
     new THREE.MeshBasicMaterial({ map: monitorTex }),
   );
   screenMesh.rotation.y = Math.PI / 2;
   screenMesh.position.set(-0.358, 1.46, 0.22);
-  deskGroup.add(screenMesh);
+  monitorGroup.add(screenMesh);
+  const monitorInfo = {
+    name: 'Studio 34" 超宽屏显示器',
+    period: '桌面核心屏幕',
+    category: '主显示器',
+    note: '展示桌搭系统状态与音频波形，点击可单独放大赏析',
+  };
+  monitorGroup.userData.gadgetRoot = monitorGroup;
+  monitorGroup.userData.gadgetInfo = monitorInfo;
+  monitorGroup.userData.gadgetFocus = { offset: [-0.36, 1.46, 0.22], forward: [1, 0.06, 0], distance: 1.25 };
+  monitorGroup.traverse(node => {
+    if (node.isMesh) {
+      node.userData.gadget = monitorInfo;
+      node.userData.gadgetRoot = monitorGroup;
+    }
+  });
+  deskGroup.add(monitorGroup);
 
   // Architect Brass & Matte Desk Lamp
   deskGroup.add(box(0.18, 0.03, 0.18, matteMetalMat, [-0.35, 0.915, -1.45], { radius: 0.01 }));
@@ -429,22 +450,36 @@ export function createRoomStage(container, { onSelectSlot, onHoverSlot, onHoverG
   roomGroup.add(buildStudioChair(propMats));
 
   // =========================================================
-  // ZONE 2: ILLUMINATED MEDIA SHELF (shelf-1, shelf-2)
+  // ZONE 2: ILLUMINATED GAME DISPLAY CABINET (游戏一柜: shelf-1, shelf-2)
   // =========================================================
   const shelfGroup = new THREE.Group();
-  shelfGroup.position.set(-0.65, 0, -2.58);
-  shelfGroup.add(box(2.96, 3.08, 0.06, darkOakMat, [0, 1.54, -0.3]));
+  shelfGroup.position.set(-0.65, 0, -2.56);
+  // Dedicated dark vitrine plinth base + glowing accent trim
+  shelfGroup.add(box(3.04, 0.14, 0.72, matteMetalMat, [0, 0.07, 0], { radius: 0.016 }));
+  shelfGroup.add(box(2.96, 0.02, 0.03, accentLedMat, [0, 0.142, 0.345], { cast: false }));
+  // Charcoal back & walnut cabinet frame
+  shelfGroup.add(box(2.96, 2.98, 0.06, darkOakMat, [0, 1.62, -0.3]));
   for (const sx of [-1.45, 0, 1.45]) {
-    shelfGroup.add(box(0.07, 3.08, 0.64, walnutMat, [sx, 1.54, 0], { radius: 0.01 }));
+    shelfGroup.add(box(0.07, 2.98, 0.64, walnutMat, [sx, 1.62, 0], { radius: 0.01 }));
   }
-  for (const sy of [0.08, 0.88, 1.72, 2.58, 3.06]) {
+  for (const sy of [0.16, 0.9, 1.72, 2.58, 3.08]) {
     shelfGroup.add(box(2.96, 0.06, 0.64, walnutMat, [0, sy, 0], { radius: 0.01 }));
   }
-  for (const ly of [0.84, 1.68, 2.54, 3.02]) {
+  // Slender front glass-cabinet mullions & transparent vitrine glass doors
+  for (const gx of [-1.42, 1.42]) {
+    shelfGroup.add(box(0.03, 2.9, 0.03, matteMetalMat, [gx, 1.62, 0.315]));
+  }
+  const gameGlassLeft = box(1.38, 2.86, 0.016, glassMat, [-0.72, 1.62, 0.315], { cast: false, receive: false });
+  const gameGlassRight = box(1.38, 2.86, 0.016, glassMat, [0.72, 1.62, 0.315], { cast: false, receive: false });
+  gameGlassLeft.renderOrder = 4;
+  gameGlassRight.renderOrder = 4;
+  shelfGroup.add(gameGlassLeft, gameGlassRight);
+
+  for (const ly of [0.86, 1.68, 2.54, 3.04]) {
     shelfGroup.add(box(1.32, 0.018, 0.035, ledStripMat, [-0.72, ly, 0.18], { cast: false }));
     shelfGroup.add(box(1.32, 0.018, 0.035, ledStripMat, [0.72, ly, 0.18], { cast: false }));
   }
-  const activeGadgets = buildActiveGadgets(deskGroup, shelfGroup);
+  const activeGadgets = buildActiveGadgets(deskGroup, shelfGroup, { fast: isSoftwareGpu });
   const roomDecor = buildRoomDecor(roomGroup, shelfGroup, propMats);
   roomGroup.add(shelfGroup);
 
@@ -514,10 +549,10 @@ export function createRoomStage(container, { onSelectSlot, onHoverSlot, onHoverG
   // SLOT ANCHORS & DYNAMIC 3D EXHIBITS
   // =========================================================
   const slotSpecs = {
-    'desk-1': { parent: deskGroup, pos: [0.16, 0.9, -1.16], rotY: Math.PI / 2, kind: 'electronics' },
-    'desk-2': { parent: deskGroup, pos: [0.16, 0.9, 1.18], rotY: Math.PI / 2 - 0.18, kind: 'electronics' },
-    'shelf-1': { parent: shelfGroup, pos: [-0.72, 1.75, 0.04], rotY: 0.1, kind: 'game' },
-    'shelf-2': { parent: shelfGroup, pos: [0.72, 0.91, 0.04], rotY: -0.1, kind: 'game' },
+    'desk-1': { parent: deskGroup, pos: [0.18, 0.9, -1.16], rotY: Math.PI / 2, kind: 'electronics' },
+    'desk-2': { parent: deskGroup, pos: [0.18, 0.9, 1.18], rotY: Math.PI / 2 - 0.18, kind: 'electronics' },
+    'shelf-1': { parent: shelfGroup, pos: [-0.72, 1.75, 0.04], rotY: 0.06, kind: 'game' },
+    'shelf-2': { parent: shelfGroup, pos: [0.72, 0.93, 0.04], rotY: -0.06, kind: 'game' },
     'cabinet-1': { parent: cabinetGroup, pos: [0, 2.08, 0], rotY: 0, kind: 'figure' },
     'cabinet-2': { parent: cabinetGroup, pos: [0, 1.24, 0], rotY: 0, kind: 'figure' },
   };
@@ -687,71 +722,75 @@ export function createRoomStage(container, { onSelectSlot, onHoverSlot, onHoverG
     const group = new THREE.Group();
     const spec = slotSpecs[id];
 
-    // Refined museum coaster / recessed glowing hairline ring
+    // Keep unoccupied slots completely clean — zero placeholder discs or empty badges
+    if (!exhibit) {
+      anchor.add(group);
+      slotGroups.set(id, group);
+      return;
+    }
+
+    // Bespoke museum pedestal for occupied exhibits
     const baseMat = new THREE.MeshStandardMaterial({
-      color: exhibit ? 0x1e293b : 0x334155,
+      color: 0x1e293b,
       roughness: 0.35,
       metalness: 0.72,
     });
     const ringMat = new THREE.MeshStandardMaterial({
-      color: exhibit ? 0x34d399 : 0x64748b,
-      emissive: exhibit ? 0x10b981 : 0x334155,
-      emissiveIntensity: exhibit ? 0.85 : 0.18,
+      color: 0x34d399,
+      emissive: 0x10b981,
+      emissiveIntensity: 0.85,
       roughness: 0.25,
     });
-    const baseRadius = exhibit ? 0.23 : 0.16;
-    const basePad = new THREE.Mesh(new THREE.CylinderGeometry(baseRadius, baseRadius + 0.018, 0.018, 32), baseMat);
+    const basePad = new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.248, 0.018, 32), baseMat);
     basePad.position.y = 0.009;
     basePad.receiveShadow = true;
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(baseRadius - 0.008, 0.007, 10, 36), ringMat);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.222, 0.007, 10, 36), ringMat);
     ring.rotation.x = Math.PI / 2;
     ring.position.y = 0.019;
     group.add(basePad, ring);
     group.userData.ring = ring;
 
-    if (exhibit) {
-      let displayMesh;
-      const fallbackNodes = [];
-      if (spec.kind === 'electronics') {
-        const stand = box(0.46, 0.045, 0.25, matteMetalMat, [0, 0.04, 0], { radius: 0.01 });
-        const bezel = box(0.5, 0.38, 0.036, matteMetalMat, [0, 0.275, -0.018], { radius: 0.012 });
-        bezel.rotation.x = -0.14;
-        displayMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.34), new THREE.MeshStandardMaterial({ color: 0x38bdf8 }));
-        displayMesh.position.set(0, 0.275, 0.003);
-        displayMesh.rotation.x = -0.14;
-        group.add(stand, bezel, displayMesh);
-        fallbackNodes.push(stand, bezel, displayMesh);
-      } else if (spec.kind === 'game') {
-        const easel = box(0.36, 0.04, 0.22, brassMat, [0, 0.04, 0], { radius: 0.01 });
-        const caseBox = box(0.38, 0.5, 0.045, new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.28, metalness: 0.45 }), [0, 0.29, -0.01], { radius: 0.01 });
-        caseBox.rotation.x = -0.12;
-        displayMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.35, 0.46), new THREE.MeshStandardMaterial({ color: 0xa78bfa }));
-        displayMesh.position.set(0, 0.29, 0.016);
-        displayMesh.rotation.x = -0.12;
-        group.add(easel, caseBox, displayMesh);
-        fallbackNodes.push(easel, caseBox, displayMesh);
-      } else {
-        const riser = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.22, 0.25, 0.08, 32),
-          new THREE.MeshStandardMaterial({ color: 0x18212f, roughness: 0.22, metalness: 0.78 }),
-        );
-        riser.position.y = 0.058;
-        const brassTrim = new THREE.Mesh(new THREE.TorusGeometry(0.222, 0.008, 10, 32), brassMat);
-        brassTrim.rotation.x = Math.PI / 2;
-        brassTrim.position.y = 0.098;
-        const frame = box(0.48, 0.58, 0.032, matteMetalMat, [0, 0.41, -0.015], { radius: 0.01 });
-        displayMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.44, 0.54), new THREE.MeshStandardMaterial({ color: 0xfbbf24, side: THREE.DoubleSide }));
-        displayMesh.position.set(0, 0.41, 0.005);
-        group.add(riser, brassTrim, frame, displayMesh);
-        fallbackNodes.push(frame, displayMesh);
-        group.userData.turntable = true;
-      }
-      displayMesh.userData.slotId = id;
-      applyCoverMaterial(displayMesh, exhibit, spec.kind === 'electronics' ? 0x38bdf8 : spec.kind === 'game' ? 0xa78bfa : 0xfbbf24);
-      interactiveMeshes.push(displayMesh);
-      if (exhibit.modelUrl) {
-        void loadGlbIntoSlot(id, group, exhibit, fallbackNodes, version);
-      }
+    let displayMesh;
+    const fallbackNodes = [];
+    if (spec.kind === 'electronics') {
+      const stand = box(0.46, 0.045, 0.25, matteMetalMat, [0, 0.04, 0], { radius: 0.01 });
+      const bezel = box(0.5, 0.38, 0.036, matteMetalMat, [0, 0.275, -0.018], { radius: 0.012 });
+      bezel.rotation.x = -0.14;
+      displayMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.34), new THREE.MeshStandardMaterial({ color: 0x38bdf8 }));
+      displayMesh.position.set(0, 0.275, 0.003);
+      displayMesh.rotation.x = -0.14;
+      group.add(stand, bezel, displayMesh);
+      fallbackNodes.push(stand, bezel, displayMesh);
+    } else if (spec.kind === 'game') {
+      const easel = box(0.36, 0.04, 0.22, brassMat, [0, 0.04, 0], { radius: 0.01 });
+      const caseBox = box(0.38, 0.5, 0.045, new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.28, metalness: 0.45 }), [0, 0.29, -0.01], { radius: 0.01 });
+      caseBox.rotation.x = -0.12;
+      displayMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.35, 0.46), new THREE.MeshStandardMaterial({ color: 0xa78bfa }));
+      displayMesh.position.set(0, 0.29, 0.016);
+      displayMesh.rotation.x = -0.12;
+      group.add(easel, caseBox, displayMesh);
+      fallbackNodes.push(easel, caseBox, displayMesh);
+    } else {
+      const riser = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.22, 0.25, 0.08, 32),
+        new THREE.MeshStandardMaterial({ color: 0x18212f, roughness: 0.22, metalness: 0.78 }),
+      );
+      riser.position.y = 0.058;
+      const brassTrim = new THREE.Mesh(new THREE.TorusGeometry(0.222, 0.008, 10, 32), brassMat);
+      brassTrim.rotation.x = Math.PI / 2;
+      brassTrim.position.y = 0.098;
+      const frame = box(0.48, 0.58, 0.032, matteMetalMat, [0, 0.41, -0.015], { radius: 0.01 });
+      displayMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.44, 0.54), new THREE.MeshStandardMaterial({ color: 0xfbbf24, side: THREE.DoubleSide }));
+      displayMesh.position.set(0, 0.41, 0.005);
+      group.add(riser, brassTrim, frame, displayMesh);
+      fallbackNodes.push(frame, displayMesh);
+      group.userData.turntable = true;
+    }
+    displayMesh.userData.slotId = id;
+    applyCoverMaterial(displayMesh, exhibit, spec.kind === 'electronics' ? 0x38bdf8 : spec.kind === 'game' ? 0xa78bfa : 0xfbbf24);
+    interactiveMeshes.push(displayMesh);
+    if (exhibit.modelUrl) {
+      void loadGlbIntoSlot(id, group, exhibit, fallbackNodes, version);
     }
 
     anchor.add(group);
@@ -793,6 +832,54 @@ export function createRoomStage(container, { onSelectSlot, onHoverSlot, onHoverG
       endPos: new THREE.Vector3(...preset.position),
       startTarget: controls.target.clone(),
       endTarget: new THREE.Vector3(...preset.target),
+      progress: 0,
+    };
+    markActive();
+  }
+
+  function focusSlot(slotId) {
+    const anchor = slotAnchors.get(slotId);
+    const spec = slotSpecs[slotId];
+    if (!anchor || !spec) return;
+    anchor.updateMatrixWorld(true);
+    const targetPos = new THREE.Vector3();
+    const quat = new THREE.Quaternion();
+    anchor.getWorldPosition(targetPos);
+    anchor.getWorldQuaternion(quat);
+    targetPos.y += spec.kind === 'figure' ? 0.36 : 0.26;
+    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(quat).normalize();
+    const dist = spec.kind === 'figure' ? 1.42 : 1.15;
+    const camPos = targetPos.clone().addScaledVector(forward, dist);
+    camPos.y += 0.16;
+    activeZone = spec.kind;
+    camAnim = {
+      startPos: camera.position.clone(),
+      endPos: camPos,
+      startTarget: controls.target.clone(),
+      endTarget: targetPos,
+      progress: 0,
+    };
+    markActive();
+  }
+
+  function focusGadget(gadgetRoot) {
+    if (!gadgetRoot) return;
+    gadgetRoot.updateMatrixWorld(true);
+    const focus = gadgetRoot.userData.gadgetFocus || {};
+    const offset = new THREE.Vector3(...(focus.offset || [0, 0.12, 0]));
+    const forward = new THREE.Vector3(...(focus.forward || [0, 0.15, 1])).normalize();
+    const dist = focus.distance || 0.85;
+    const targetPos = offset.clone().applyMatrix4(gadgetRoot.matrixWorld);
+    const worldQuat = new THREE.Quaternion();
+    gadgetRoot.getWorldQuaternion(worldQuat);
+    const worldForward = forward.applyQuaternion(worldQuat).normalize();
+    const camPos = targetPos.clone().addScaledVector(worldForward, dist);
+    activeZone = 'all';
+    camAnim = {
+      startPos: camera.position.clone(),
+      endPos: camPos,
+      startTarget: controls.target.clone(),
+      endTarget: targetPos,
       progress: 0,
     };
     markActive();
@@ -879,7 +966,8 @@ export function createRoomStage(container, { onSelectSlot, onHoverSlot, onHoverG
     pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(pointer, camera);
     const hits = raycaster.intersectObjects(gadgetMeshes, false);
-    return hits[0]?.object?.userData?.gadget ?? null;
+    const obj = hits[0]?.object;
+    return obj ? { info: obj.userData.gadget, root: obj.userData.gadgetRoot } : null;
   }
 
   renderer.domElement.addEventListener('pointerdown', event => {
@@ -889,15 +977,16 @@ export function createRoomStage(container, { onSelectSlot, onHoverSlot, onHoverG
   });
   renderer.domElement.addEventListener('pointermove', event => {
     const slotId = hitSlot(event.clientX, event.clientY);
-    const gadget = slotId ? null : hitGadget(event.clientX, event.clientY);
-    renderer.domElement.style.cursor = slotId ? 'pointer' : gadget ? 'help' : 'grab';
+    const gadgetHit = slotId ? null : hitGadget(event.clientX, event.clientY);
+    renderer.domElement.style.cursor = slotId || gadgetHit ? 'pointer' : 'grab';
     if (slotId !== hoveredSlot) {
       hoveredSlot = slotId;
       onHoverSlot?.(slotId);
     }
-    if (gadget !== hoveredGadget) {
-      hoveredGadget = gadget;
-      onHoverGadget?.(gadget);
+    const nextGadget = gadgetHit?.info ?? null;
+    if (nextGadget !== hoveredGadget) {
+      hoveredGadget = nextGadget;
+      onHoverGadget?.(nextGadget);
     }
   });
   renderer.domElement.addEventListener('pointerup', event => {
@@ -906,7 +995,16 @@ export function createRoomStage(container, { onSelectSlot, onHoverSlot, onHoverG
     pointerDown = null;
     if (dist < 6) {
       const slotId = hitSlot(event.clientX, event.clientY);
-      if (slotId) onSelectSlot?.(slotId);
+      if (slotId) {
+        focusSlot(slotId);
+        onSelectSlot?.(slotId, { fromCanvas: true });
+        return;
+      }
+      const gadgetHit = hitGadget(event.clientX, event.clientY);
+      if (gadgetHit?.root) {
+        focusGadget(gadgetHit.root);
+        onSelectGadget?.(gadgetHit.info);
+      }
     }
   });
 
@@ -948,15 +1046,20 @@ export function createRoomStage(container, { onSelectSlot, onHoverSlot, onHoverG
     const rawList = [];
     for (const [id, anchor] of slotAnchors.entries()) {
       const occupied = Boolean(currentExhibits.get(id));
+      if (!occupied) {
+        lastProjected[id] = { x: 0, y: 0, visible: false };
+        continue;
+      }
       anchor.getWorldPosition(worldVec);
-      worldVec.y += occupied ? 0.66 : 0.1;
+      worldVec.y += 0.66;
       worldVec.project(camera);
       const rawX = (worldVec.x * 0.5 + 0.5) * w;
       const rawY = (-worldVec.y * 0.5 + 0.5) * h;
-      const px = Math.round(Math.min(w - 86, Math.max(86, rawX)));
-      const py = Math.round(Math.min(h - 46, Math.max(46, rawY)));
-      const vis = worldVec.z > -1 && worldVec.z < 1 && rawX >= -30 && rawX <= w + 30 && rawY >= -20 && rawY <= h + 30;
-      rawList.push({ id, x: px, y: py, visible: vis, occupied });
+      const px = Math.round(Math.min(w - 115, Math.max(115, rawX)));
+      const py = Math.round(Math.min(h - 48, Math.max(52, rawY)));
+      const vis = worldVec.z > -1 && worldVec.z < 1 && rawX >= 12 && rawX <= w - 12 && rawY >= 16 && rawY <= h - 12;
+      const safeY = px > w - 190 && py < 96 ? 96 : py;
+      rawList.push({ id, x: px, y: safeY, visible: vis, occupied });
     }
 
     // Lightweight collision nudge so occupied pills never stack directly over each other
@@ -1016,7 +1119,7 @@ export function createRoomStage(container, { onSelectSlot, onHoverSlot, onHoverG
     }
 
     if (controls.update()) activeMotion = true;
-    const passiveInterval = isSoftwareGpu ? 600 : 28;
+    const passiveInterval = isSoftwareGpu ? 2500 : 28;
     if (!activeMotion && now - lastRenderTime < passiveInterval) return;
     lastRenderTime = now;
     needsRender = false;
@@ -1037,12 +1140,13 @@ export function createRoomStage(container, { onSelectSlot, onHoverSlot, onHoverG
     else renderer.render(scene, camera);
     projectMarkers();
   }
-  tick();
+  rafId = requestAnimationFrame(tick);
 
   return {
     setExhibits,
     refreshSlotTexture,
     setCameraPreset,
+    focusSlot,
     setAutoOrbit,
     isAutoOrbit: () => controls.autoRotate,
     setZoneFocus,

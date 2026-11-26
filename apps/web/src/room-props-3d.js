@@ -1,13 +1,20 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 
+let useSimpleBoxes = false;
+
 function rbox(w, h, d, radius, mat, pos = [0, 0, 0], rot = [0, 0, 0], { cast = true, receive = true } = {}) {
-  const mesh = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 1, radius), mat);
+  const geo = useSimpleBoxes || radius <= 0 ? new THREE.BoxGeometry(w, h, d) : new RoundedBoxGeometry(w, h, d, 1, radius);
+  const mesh = new THREE.Mesh(geo, mat);
   mesh.position.set(...pos);
   mesh.rotation.set(...rot);
   mesh.castShadow = cast;
   mesh.receiveShadow = receive;
   return mesh;
+}
+
+export function setPropsFastMode(fast) {
+  useSimpleBoxes = Boolean(fast);
 }
 
 function cyl(rt, rb, h, segs, mat, pos = [0, 0, 0], rot = [0, 0, 0], { cast = true, receive = true } = {}) {

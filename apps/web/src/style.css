@@ -28,9 +28,9 @@ body {
 }
 
 .app-shell {
-  max-width: 78rem;
+  max-width: min(94rem, 96vw);
   margin: 0 auto;
-  padding: clamp(1.5rem, 4vw, 3rem) clamp(1rem, 2.5vw, 2rem) 4rem;
+  padding: clamp(1.25rem, 3vw, 2.25rem) clamp(1rem, 2.5vw, 2rem) 4rem;
   display: grid;
   gap: 1.25rem;
 }

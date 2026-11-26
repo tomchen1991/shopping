@@ -1,7 +1,7 @@
 import { createWorker } from '../src/worker.js';
 
 // Test-only credentials. This file is not imported by the Wrangler entrypoint.
-const testSessions = new Map([['test-alice', 'alice'], ['test-bob', 'bob'], ['test-room-owner', 'room-owner']]);
+const testSessions = new Map([['test-alice', 'alice'], ['test-bob', 'bob'], ['test-room-owner', 'room-owner'], ['test-model-owner', 'model-owner']]);
 export default createWorker({
   resolveIdentity(request) {
     const authorization = request.headers.get('Authorization');
